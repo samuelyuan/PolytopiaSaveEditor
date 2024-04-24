@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"os"
 )
@@ -105,7 +106,8 @@ type PlayerData struct {
 	TotalUnitsKilled     int
 	TotalUnitsLost       int
 	TotalTribesDestroyed int
-	UnknownBuffer1       []byte
+	OverrideColor        []byte
+	UnknownByte2         byte
 	UniqueImprovements   []int
 	DiplomacyArr         []DiplomacyData
 	DiplomacyMessages    []DiplomacyMessage
@@ -323,6 +325,8 @@ func readExistingCityData(streamReader *io.SectionReader, tileDataHeader TileDat
 		bufferUnitData = append(bufferUnitData, bufferUnit...)
 	}
 
+	tileVisibilityLocationKey := buildTileVisibilityLocationKey(int(tileDataHeader.WorldCoordinates[0]), int(tileDataHeader.WorldCoordinates[1]))
+	updateFileOffsetMap(fileOffsetMap, streamReader, tileVisibilityLocationKey)
 	playerVisibilityListSize := unsafeReadUint8(streamReader)
 	playerVisibilityList := readFixedList(streamReader, int(playerVisibilityListSize))
 	hasRoad := unsafeReadUint8(streamReader)
@@ -415,6 +419,8 @@ func readOtherTile(streamReader *io.SectionReader, tileDataHeader TileDataHeader
 		}
 	}
 
+	tileVisibilityLocationKey := buildTileVisibilityLocationKey(int(tileDataHeader.WorldCoordinates[0]), int(tileDataHeader.WorldCoordinates[1]))
+	updateFileOffsetMap(fileOffsetMap, streamReader, tileVisibilityLocationKey)
 	playerVisibilityListSize := unsafeReadUint8(streamReader)
 	playerVisibilityList := readFixedList(streamReader, int(playerVisibilityListSize))
 	hasRoad := unsafeReadUint8(streamReader)
@@ -613,7 +619,8 @@ func readPlayerData(streamReader *io.SectionReader) PlayerData {
 	totalKills := unsafeReadInt32(streamReader)
 	totalLosses := unsafeReadInt32(streamReader)
 	totalTribesDestroyed := unsafeReadInt32(streamReader)
-	unknownBuffer1 := readFixedList(streamReader, 5)
+	overrideColor := readFixedList(streamReader, 4)
+	unknownByte2 := unsafeReadUint8(streamReader)
 
 	playerUniqueImprovementsSize := unsafeReadUint16(streamReader)
 	playerUniqueImprovements := make([]int, int(playerUniqueImprovementsSize))
@@ -668,7 +675,8 @@ func readPlayerData(streamReader *io.SectionReader) PlayerData {
 		TotalUnitsKilled:     int(totalKills),
 		TotalUnitsLost:       int(totalLosses),
 		TotalTribesDestroyed: int(totalTribesDestroyed),
-		UnknownBuffer1:       unknownBuffer1,
+		OverrideColor:        overrideColor,
+		UnknownByte2:         unknownByte2,
 		UniqueImprovements:   playerUniqueImprovements,
 		DiplomacyArr:         diplomacyArr,
 		DiplomacyMessages:    diplomacyMessagesArr,
@@ -713,6 +721,10 @@ func buildPreviousUnitLocationKey(x int, y int) string {
 	return fmt.Sprintf("PreviousUnitLocation%v,%v", x, y)
 }
 
+func buildTileVisibilityLocationKey(x int, y int) string {
+	return fmt.Sprintf("TileVisibility%v,%v", x, y)
+}
+
 func updateFileOffsetMap(fileOffsetMap map[string]int, streamReader *io.SectionReader, unitLocationKey string) {
 	fileOffset, err := streamReader.Seek(0, io.SeekCurrent)
 	if err != nil {
@@ -736,6 +748,61 @@ func ModifyUnitTribe(inputFilename string, targetX int, targetY int, updatedValu
 	offsetPreviousUnit, ok := fileOffsetMap[buildPreviousUnitLocationKey(targetX, targetY)]
 	if ok {
 		WriteUint8AtFileOffset(inputFilename, offsetPreviousUnit+4, updatedValue)
+	}
+}
+
+func RevealTileForTribe(inputFilename string, targetX int, targetY int, newTribe int) {
+	fmt.Printf("Reading tile visibility data for (%v, %v)\n", targetX, targetY)
+	offset, ok := fileOffsetMap[buildTileVisibilityLocationKey(targetX, targetY)]
+	if !ok {
+		log.Fatal(fmt.Sprintf("Error: No visibility data on tile x: %v, y: %v. Command not run.", targetX, targetY))
+	}
+
+	inputFile, err := os.OpenFile(inputFilename, os.O_RDWR, 0644)
+	if err != nil {
+		log.Fatal("Failed to load save state:", err)
+	}
+
+	visibilitySize := make([]byte, 1)
+	_, err = inputFile.ReadAt(visibilitySize, int64(offset))
+	if err != nil {
+		log.Fatal("Failed to load visibility size:", err)
+	}
+
+	visibilityData := make([]byte, visibilitySize[0])
+	bytesRead, err := inputFile.ReadAt(visibilityData, int64(offset)+1)
+	if err != nil {
+		log.Fatal("Failed to load visibility data:", err)
+	}
+	if bytesRead != int(visibilitySize[0]) {
+		log.Fatal(fmt.Sprintf("Not enough visibility data loaded. Expected %v but only read %v bytes.", visibilitySize, bytesRead))
+	}
+
+	fmt.Println("Existing visibility data:", visibilityData)
+	for i := 0; i < len(visibilityData); i++ {
+		if int(visibilityData[i]) == newTribe {
+			fmt.Printf("Tile is already visible to tribe %v. No change will be made to visibility data.\n", newTribe)
+			return
+		}
+	}
+
+	if _, err := inputFile.Seek(int64(offset+1+len(visibilityData)), 0); err != nil {
+		log.Fatal(err)
+	}
+	remainder, err := ioutil.ReadAll(inputFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	newVisibilityData := append(visibilityData, byte(newTribe))
+	if _, err := inputFile.WriteAt([]byte{uint8(len(newVisibilityData))}, int64(offset)); err != nil {
+		log.Fatal(err)
+	}
+	if _, err := inputFile.WriteAt(newVisibilityData, int64(offset)+1); err != nil {
+		log.Fatal(err)
+	}
+	if _, err := inputFile.WriteAt(remainder, int64(offset+1+len(newVisibilityData))); err != nil {
+		log.Fatal(err)
 	}
 }
 

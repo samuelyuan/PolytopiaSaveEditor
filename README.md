@@ -25,10 +25,13 @@ Commands to modify indiviudal tiles
 
 1. modify-unit-tribe: Modify the unit to switch to a different tribe, but keep the same type.
 2. modify-unit-type: Modify the unit type, but keep the same tribe.
+3. reveal-tile: Reveal the tile for a player.
 
 Commands to modify multiple units:
 
-1. change-all-tribe-units: Change all units under one tribe to be under a different tribe. If you use this command, you can convert all units from another player to become your units.
+1. convert-tribe: Change all units under one tribe to be under a different tribe. If you use this command, you can convert all units from another player to become your units.
+2. convert-all-units: This will change all units in the game to be under one tribe. This is more efficient to run if you want to convert all tribes in one command.
+3. reveal-all-tiles: This will reveal all tiles on the map for one player. Using this command will break the Explorer task because the game won't trigger the logic that updates and checks that you saw all the lighthouses on the map.
 
 The commands to modify the file will make changes within the decompressed file.
 
