@@ -24,14 +24,43 @@ Read-only commands:
 Commands to modify indiviudal tiles
 
 1. modify-unit-tribe: Modify the unit to switch to a different tribe, but keep the same type.
+
+```
+./PolytopiaSaveEditor -input=[decompressed file name] -mode=modify-unit-tribe -x=[tile's x value] -y=[tile's y value] -value=[new tribe]
+```
+
 2. modify-unit-type: Modify the unit type, but keep the same tribe.
+
+```
+./PolytopiaSaveEditor -input=[decompressed file name] -mode=modify-unit-type -x=[tile's x value] -y=[tile's y value] -value=[new tribe]
+```
+
 3. reveal-tile: Reveal the tile for a player.
+
+```
+./PolytopiaSaveEditor -input=[decompressed file name] -mode=reveal-tile -x=[tile's x value] -y=[tile's y value] -value=[player's tribe]
+```
 
 Commands to modify multiple units:
 
 1. convert-tribe: Change all units under one tribe to be under a different tribe. If you use this command, you can convert all units from another player to become your units.
+
+```
+./PolytopiaSaveEditor -input=[decompressed file name] -mode=convert-tribe -oldvalue=[old tribe] -value=[new tribe]
+```
+
 2. convert-all-units: This will change all units in the game to be under one tribe. This is more efficient to run if you want to convert all tribes in one command.
+
+```
+./PolytopiaSaveEditor -input=[decompressed file name] -mode=convert-all-units -value=[new tribe]
+```
+
 3. reveal-all-tiles: This will reveal all tiles on the map for one player. Using this command will break the Explorer task because the game won't trigger the logic that updates and checks that you saw all the lighthouses on the map.
+
+
+```
+./PolytopiaSaveEditor -input=[decompressed file name] -mode=reveal-all-tiles -value=[player's tribe]
+```
 
 The commands to modify the file will make changes within the decompressed file.
 
