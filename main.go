@@ -76,6 +76,26 @@ func main() {
 
 		fileio.ModifyTileTerrain(inputFilename, targetX, targetY, updatedValue)
 		fmt.Println(fmt.Sprintf("Modified tile (%v, %v) to have terrain %v", targetX, targetY, updatedValue))
+	} else if mode == "modify-tile-owner" {
+		targetX := *xPtr
+		targetY := *yPtr
+		updatedValue, err := strconv.Atoi(*newValuePtr)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		fileio.ModifyTileOwner(inputFilename, targetX, targetY, updatedValue)
+		fmt.Println(fmt.Sprintf("Modified tile (%v, %v) to have owner %v", targetX, targetY, updatedValue))
+	} else if mode == "modify-tile-road" {
+		targetX := *xPtr
+		targetY := *yPtr
+		updatedValue, err := strconv.Atoi(*newValuePtr)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		fileio.ModifyTileRoad(inputFilename, targetX, targetY, updatedValue)
+		fmt.Println(fmt.Sprintf("Modified tile (%v, %v) to have road %v", targetX, targetY, updatedValue))
 	} else if mode == "add-city" {
 		targetX := *xPtr
 		targetY := *yPtr
@@ -87,6 +107,9 @@ func main() {
 
 		fileio.AddCityToTile(inputFilename, targetX, targetY, cityName, tribe)
 		fmt.Println(fmt.Sprintf("Created city %v at (%v, %v) for player %v", cityName, targetX, targetY, tribe))
+	} else if mode == "add-player" {
+		fileio.AddPlayer(inputFilename)
+		fmt.Println("Added new player to game")
 	} else if mode == "reset-tile" {
 		targetX := *xPtr
 		targetY := *yPtr
@@ -144,59 +167,33 @@ func main() {
 		}
 		fmt.Println(fmt.Sprintf("Changed all units to be under tribe %v", updatedValue))
 	} else if mode == "reveal-all-tiles" {
-		updatedValue, err := strconv.Atoi(*newValuePtr)
+		newTribe, err := strconv.Atoi(*newValuePtr)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		for i := saveOutput.MapHeight - 1; i >= 0; i-- {
-			for j := saveOutput.MapWidth - 1; j >= 0; j-- {
-				targetX := j
-				targetY := i
-				fileio.RevealTileForTribe(inputFilename, targetX, targetY, updatedValue)
-				fmt.Println(fmt.Sprintf("Revealed (%v, %v) for tribe %v", targetX, targetY, updatedValue))
-			}
-		}
-	} else if mode == "expand-tiles" {
-		updatedValue, err := strconv.Atoi(*newValuePtr)
+		fileio.RevealAllTiles(inputFilename, newTribe)
+	} else if mode == "expand-map-rows" {
+		newRowDimensions, err := strconv.Atoi(*newValuePtr)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		if updatedValue >= 256 {
-			log.Fatal("Updated value is over 256")
+		fileio.ExpandRows(inputFilename, newRowDimensions)
+	} else if mode == "expand-map-cols" {
+		newRowDimensions, err := strconv.Atoi(*newValuePtr)
+		if err != nil {
+			log.Fatal(err)
 		}
 
-		if updatedValue <= saveOutput.MapWidth || updatedValue <= saveOutput.MapHeight {
-			log.Fatal(fmt.Sprintf("New dimensions are less than existing dimensions, new value: %v, existing width: %v, height: %v",
-				updatedValue, saveOutput.MapWidth, saveOutput.MapHeight))
+		fileio.ExpandColumns(inputFilename, newRowDimensions)
+	} else if mode == "expand-map" {
+		newSquareSizeDimensions, err := strconv.Atoi(*newValuePtr)
+		if err != nil {
+			log.Fatal(err)
 		}
 
-		minDimensions := saveOutput.MapWidth
-		if minDimensions > saveOutput.MapHeight {
-			minDimensions = saveOutput.MapHeight
-		}
-
-		for i := minDimensions; i < updatedValue; i++ {
-			saveOutputBeforeRows, err := fileio.ReadPolytopiaDecompressedFile(inputFilename)
-			fmt.Println(fmt.Sprintf("Old dimensions width: %v, height: %v", saveOutputBeforeRows.MapWidth, saveOutputBeforeRows.MapHeight))
-			if err != nil {
-				log.Fatal("Failed to read save file")
-			}
-			fileio.WriteEmptyRow(inputFilename, saveOutputBeforeRows.MapWidth-1, saveOutputBeforeRows.MapHeight-1)
-			fileio.ModifyMapDimensions(inputFilename, saveOutputBeforeRows.MapWidth, saveOutputBeforeRows.MapHeight+1)
-
-			saveOutputBeforeColumns, err := fileio.ReadPolytopiaDecompressedFile(inputFilename)
-			fmt.Println(fmt.Sprintf("Dimensions after modifying rows, width: %v, height: %v", saveOutputBeforeColumns.MapWidth, saveOutputBeforeColumns.MapHeight))
-			if err != nil {
-				log.Fatal("Failed to read save file")
-			}
-			fileio.WriteEmptyColumn(inputFilename, saveOutputBeforeColumns.MapWidth-1, saveOutputBeforeColumns.MapHeight-1)
-			fileio.ModifyMapDimensions(inputFilename, saveOutputBeforeColumns.MapWidth+1, saveOutputBeforeColumns.MapHeight)
-		}
-
-		finalSaveOutput, err := fileio.ReadPolytopiaDecompressedFile(inputFilename)
-		fmt.Println(fmt.Sprintf("New dimensions, width: %v, height: %v", finalSaveOutput.MapWidth, finalSaveOutput.MapHeight))
+		fileio.ExpandTiles(inputFilename, newSquareSizeDimensions)
 	} else {
 		log.Fatal("Invalid mode:", mode)
 	}
