@@ -15,6 +15,10 @@ func main() {
 	modePtr := flag.String("mode", "decompress", "Output mode")
 	xPtr := flag.Int("x", -1, "x")
 	yPtr := flag.Int("y", -1, "y")
+	// color
+	rPtr := flag.Int("r", -1, "Color r")
+	gPtr := flag.Int("g", -1, "Color g")
+	bPtr := flag.Int("b", -1, "Color b")
 	cityNamePtr := flag.String("cityname", "", "City name")
 	oldValuePtr := flag.String("oldvalue", "", "Old value")
 	newValuePtr := flag.String("value", "", "New value")
@@ -66,6 +70,21 @@ func main() {
 
 		fileio.RevealTileForTribe(inputFilename, targetX, targetY, updatedValue)
 		fmt.Println(fmt.Sprintf("Revealed (%v, %v) for tribe %v", targetX, targetY, updatedValue))
+	} else if mode == "modify-tile-capital" {
+		targetX := *xPtr
+		targetY := *yPtr
+		updatedValue, err := strconv.Atoi(*newValuePtr)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		if updatedValue >= 255 {
+			log.Fatal("Value must be less than 255")
+		}
+		updatedTile := saveOutput.TileData[targetY][targetX]
+		updatedTile.Capital = updatedValue
+		fileio.WriteTileToFile(inputFilename, updatedTile, targetX, targetY)
+		fmt.Println(fmt.Sprintf("Modified tile (%v, %v) to have capital %v", targetX, targetY, updatedValue))
 	} else if mode == "modify-tile-terrain" {
 		targetX := *xPtr
 		targetY := *yPtr
@@ -84,7 +103,9 @@ func main() {
 			log.Fatal(err)
 		}
 
-		fileio.ModifyTileOwner(inputFilename, targetX, targetY, updatedValue)
+		updatedTile := saveOutput.TileData[targetY][targetX]
+		updatedTile.Owner = updatedValue
+		fileio.WriteTileToFile(inputFilename, updatedTile, targetX, targetY)
 		fmt.Println(fmt.Sprintf("Modified tile (%v, %v) to have owner %v", targetX, targetY, updatedValue))
 	} else if mode == "modify-tile-road" {
 		targetX := *xPtr
@@ -94,7 +115,17 @@ func main() {
 			log.Fatal(err)
 		}
 
-		fileio.ModifyTileRoad(inputFilename, targetX, targetY, updatedValue)
+		if updatedValue != 0 && updatedValue != 1 {
+			log.Fatal("New value must be 0 or 1")
+		}
+
+		updatedTile := saveOutput.TileData[targetY][targetX]
+		if updatedValue == 1 {
+			updatedTile.HasRoad = true
+		} else {
+			updatedTile.HasRoad = false
+		}
+		fileio.WriteTileToFile(inputFilename, updatedTile, targetX, targetY)
 		fmt.Println(fmt.Sprintf("Modified tile (%v, %v) to have road %v", targetX, targetY, updatedValue))
 	} else if mode == "add-city" {
 		targetX := *xPtr
@@ -130,6 +161,23 @@ func main() {
 				fmt.Printf("Unit %v: %+v\n", i, units[i])
 			}
 		}
+	} else if mode == "list-players" {
+		for i := 0; i < len(saveOutput.PlayerData); i++ {
+			playerData := saveOutput.PlayerData[i]
+			fmt.Printf("Player id: %v, name: %v, tribe: %v, override color: %v\n",
+				playerData.Id, playerData.Name, playerData.Tribe, playerData.OverrideColor)
+		}
+	} else if mode == "modify-player-color" {
+		playerId, err := strconv.Atoi(*newValuePtr)
+		if err != nil {
+			log.Fatal(err)
+		}
+		colorR := *rPtr
+		colorG := *gPtr
+		colorB := *bPtr
+
+		fileio.ModifyPlayerColor(inputFilename, playerId, colorR, colorG, colorB)
+		fmt.Println(fmt.Sprintf("Set player %v color to RGB(%v, %v, %v)", playerId, colorR, colorG, colorB))
 	} else if mode == "convert-tribe" {
 		oldValue, err := strconv.Atoi(*oldValuePtr)
 		if err != nil {
@@ -194,6 +242,20 @@ func main() {
 		}
 
 		fileio.ExpandTiles(inputFilename, newSquareSizeDimensions)
+	} else if mode == "reset-game" {
+		currentMapHeight := len(saveOutput.TileData)
+		currentMapWidth := len(saveOutput.TileData[0])
+
+		initialMapHeight := len(saveOutput.InitialTileData)
+		initialMapWidth := len(saveOutput.InitialTileData[0])
+		fileio.WriteMapToFile(inputFilename, saveOutput.InitialTileData, currentMapWidth-1, currentMapHeight-1)
+		fileio.ModifyMapDimensions(inputFilename, initialMapWidth, initialMapHeight)
+	} else if mode == "copy-map" {
+		// tests byte conversion of map data
+		// make sure new data is equal to old data
+		mapHeight := len(saveOutput.TileData)
+		mapWidth := len(saveOutput.TileData[0])
+		fileio.WriteMapToFile(inputFilename, saveOutput.TileData, mapWidth-1, mapHeight-1)
 	} else {
 		log.Fatal("Invalid mode:", mode)
 	}

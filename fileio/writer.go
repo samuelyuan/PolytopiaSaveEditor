@@ -90,14 +90,331 @@ func ConvertVarString(value string) []byte {
 	return byteArr
 }
 
-func ModifyTileTerrain(inputFilename string, targetX int, targetY int, updatedValue int) {
-	offset, ok := fileOffsetMap[buildTileStartKey(targetX, targetY)]
+func ConvertBoolToByte(value bool) byte {
+	if value {
+		return 1
+	} else {
+		return 0
+	}
+}
+
+func ConvertCityDataToBytes(cityData CityData) []byte {
+	data := make([]byte, 0)
+	data = append(data, ConvertUint16Bytes(int(cityData.CityLevel))...)
+	data = append(data, ConvertUint16Bytes(int(cityData.FoundedTurn))...)
+	data = append(data, ConvertUint16Bytes(int(cityData.CurrentPopulation))...)
+	data = append(data, ConvertUint16Bytes(int(cityData.TotalPopulation))...)
+	data = append(data, ConvertUint16Bytes(int(cityData.UnknownShort1))...)
+	data = append(data, ConvertUint16Bytes(int(cityData.ParkBonus))...)
+	data = append(data, ConvertUint16Bytes(int(cityData.UnknownShort2))...)
+	data = append(data, ConvertUint16Bytes(int(cityData.UnknownShort3))...)
+	data = append(data, byte(cityData.ConnectedPlayerCapital))
+	data = append(data, byte(cityData.HasCityName))
+	data = append(data, ConvertVarString(cityData.CityName)...)
+	data = append(data, byte(cityData.FoundedTribe))
+	data = append(data, ConvertUint16Bytes(len(cityData.CityRewards))...)
+	for i := 0; i < len(cityData.CityRewards); i++ {
+		data = append(data, ConvertUint16Bytes(int(cityData.CityRewards[i]))...)
+	}
+	data = append(data, ConvertUint16Bytes(int(cityData.RebellionFlag))...)
+	if cityData.RebellionFlag != 0 {
+		data = append(data, cityData.RebellionBuffer...)
+	}
+	return data
+}
+
+func ConvertImprovementDataToBytes(improvementData ImprovementData) []byte {
+	data := make([]byte, 0)
+	data = append(data, ConvertUint16Bytes(int(improvementData.Level))...)
+	data = append(data, ConvertUint16Bytes(int(improvementData.FoundedTurn))...)
+	data = append(data, ConvertUint16Bytes(int(improvementData.CurrentPopulation))...)
+	data = append(data, ConvertUint16Bytes(int(improvementData.TotalPopulation))...)
+	data = append(data, ConvertUint16Bytes(int(improvementData.UnknownShort1))...)
+	data = append(data, ConvertUint16Bytes(int(improvementData.BaseScore))...)
+	data = append(data, ConvertUint16Bytes(int(improvementData.Unknown2[0]))...)
+	data = append(data, ConvertUint16Bytes(int(improvementData.Unknown2[1]))...)
+	data = append(data, improvementData.ConnectedPlayerCapital)
+	data = append(data, improvementData.HasCityName)
+	data = append(data, improvementData.FoundedTribe)
+	data = append(data, ConvertUint16Bytes(int(improvementData.RewardsSize))...)
+	data = append(data, ConvertUint16Bytes(int(improvementData.RebellionFlag))...)
+	return data
+}
+
+func ConvertUnitDataToBytes(unitData UnitData) []byte {
+	data := make([]byte, 0)
+	data = append(data, ConvertUint32Bytes(int(unitData.Id))...)
+	data = append(data, byte(unitData.Owner))
+	data = append(data, ConvertUint16Bytes(int(unitData.UnitType))...)
+	data = append(data, unitData.Unknown[:]...)
+	data = append(data, ConvertUint32Bytes(int(unitData.CurrentCoordinates[0]))...)
+	data = append(data, ConvertUint32Bytes(int(unitData.CurrentCoordinates[1]))...)
+	data = append(data, ConvertUint32Bytes(int(unitData.HomeCoordinates[0]))...)
+	data = append(data, ConvertUint32Bytes(int(unitData.HomeCoordinates[1]))...)
+	data = append(data, ConvertUint16Bytes(int(unitData.Health))...)
+	data = append(data, ConvertUint16Bytes(int(unitData.PromotionLevel))...)
+	data = append(data, ConvertUint16Bytes(int(unitData.Experience))...)
+	data = append(data, ConvertBoolToByte(unitData.Moved))
+	data = append(data, ConvertBoolToByte(unitData.Attacked))
+	data = append(data, ConvertBoolToByte(unitData.Flipped))
+	data = append(data, ConvertUint16Bytes(int(unitData.CreatedTurn))...)
+	return data
+}
+
+func ConvertTileToBytes(tileData TileData) []byte {
+	tileBytes := make([]byte, 0)
+
+	headerBytes := make([]byte, 0)
+	headerBytes = append(headerBytes, ConvertUint32Bytes(int(tileData.WorldCoordinates[0]))...)
+	headerBytes = append(headerBytes, ConvertUint32Bytes(int(tileData.WorldCoordinates[1]))...)
+	headerBytes = append(headerBytes, ConvertUint16Bytes(int(tileData.Terrain))...)
+	headerBytes = append(headerBytes, ConvertUint16Bytes(int(tileData.Climate))...)
+	headerBytes = append(headerBytes, ConvertUint16Bytes(int(tileData.Altitude))...) // should be int16
+	headerBytes = append(headerBytes, byte(tileData.Owner))
+	headerBytes = append(headerBytes, byte(tileData.Capital))
+	headerBytes = append(headerBytes, ConvertUint32Bytes(int(tileData.CapitalCoordinates[0]))...) // should be int32
+	headerBytes = append(headerBytes, ConvertUint32Bytes(int(tileData.CapitalCoordinates[1]))...) // should be int32
+	tileBytes = append(tileBytes, headerBytes...)
+
+	if tileData.ResourceExists {
+		tileBytes = append(tileBytes, byte(1))
+		tileBytes = append(tileBytes, ConvertUint16Bytes(tileData.ResourceType)...)
+	} else {
+		tileBytes = append(tileBytes, byte(0))
+	}
+
+	if tileData.ImprovementExists {
+		tileBytes = append(tileBytes, byte(1))
+		tileBytes = append(tileBytes, ConvertUint16Bytes(tileData.ImprovementType)...)
+	} else {
+		tileBytes = append(tileBytes, byte(0))
+	}
+
+	if tileData.Owner > 0 && tileData.ResourceType == -1 && tileData.ImprovementType == 1 {
+		// No resource, but has improvement that is city
+		tileBytes = append(tileBytes, ConvertCityDataToBytes(*tileData.CityData)...)
+	} else if tileData.ImprovementType != -1 {
+		// Has improvement and read improvement data
+		tileBytes = append(tileBytes, ConvertImprovementDataToBytes(*tileData.ImprovementData)...)
+	}
+
+	// no unit
+	if tileData.Unit != nil {
+		tileBytes = append(tileBytes, 1)
+		tileBytes = append(tileBytes, ConvertUnitDataToBytes(*tileData.Unit)...)
+
+		if tileData.PreviousUnit != nil {
+			tileBytes = append(tileBytes, 1)
+			tileBytes = append(tileBytes, ConvertUnitDataToBytes(*tileData.PreviousUnit)...)
+
+			tileBytes = append(tileBytes, 0)
+			tileBytes = append(tileBytes, tileData.BufferUnitData...)
+		} else {
+			tileBytes = append(tileBytes, 0)
+			tileBytes = append(tileBytes, byte(tileData.BufferUnitFlag))
+			tileBytes = append(tileBytes, tileData.BufferUnitData...)
+		}
+	} else {
+		tileBytes = append(tileBytes, 0)
+	}
+
+	tileBytes = append(tileBytes, byte(len(tileData.PlayerVisibility)))
+	tileBytes = append(tileBytes, tileData.PlayerVisibility...)
+	tileBytes = append(tileBytes, ConvertBoolToByte(tileData.HasRoad))
+	tileBytes = append(tileBytes, ConvertBoolToByte(tileData.HasWaterRoute))
+	tileBytes = append(tileBytes, tileData.Unknown...)
+	return tileBytes
+}
+
+func ConvertMapDataToBytes(tileData [][]TileData) []byte {
+	mapHeight := len(tileData)
+	mapWidth := len(tileData[0])
+
+	allMapBytes := make([]byte, 0)
+	for i := 0; i < mapHeight; i++ {
+		for j := 0; j < mapWidth; j++ {
+			tileBytes := ConvertTileToBytes(tileData[i][j])
+			allMapBytes = append(allMapBytes, tileBytes...)
+		}
+	}
+	return allMapBytes
+}
+
+func ConvertDiplomacyDataToBytes(diplomacyData DiplomacyData) []byte {
+	data := make([]byte, 0)
+	data = append(data, byte(diplomacyData.PlayerId))
+	data = append(data, byte(diplomacyData.DiplomacyRelationState))
+	data = append(data, ConvertUint32Bytes(int(diplomacyData.LastAttackTurn))...)
+	data = append(data, byte(diplomacyData.EmbassyLevel))
+	data = append(data, ConvertUint32Bytes(int(diplomacyData.LastPeaceBrokenTurn))...)
+	data = append(data, ConvertUint32Bytes(int(diplomacyData.FirstMeet))...)
+	data = append(data, ConvertUint32Bytes(int(diplomacyData.EmbassyBuildTurn))...)
+	data = append(data, ConvertUint32Bytes(int(diplomacyData.PreviousAttackTurn))...)
+	return data
+}
+
+func ConvertPlayerDataToBytes(playerData PlayerData) []byte {
+	allPlayerData := make([]byte, 0)
+
+	allPlayerData = append(allPlayerData, byte(playerData.Id))
+	allPlayerData = append(allPlayerData, ConvertVarString(playerData.Name)...)
+	allPlayerData = append(allPlayerData, ConvertVarString(playerData.AccountId)...)
+	allPlayerData = append(allPlayerData, ConvertBoolToByte(playerData.AutoPlay))
+	allPlayerData = append(allPlayerData, ConvertUint32Bytes(playerData.StartTileCoordinates[0])...)
+	allPlayerData = append(allPlayerData, ConvertUint32Bytes(playerData.StartTileCoordinates[1])...)
+	allPlayerData = append(allPlayerData, ConvertUint16Bytes(playerData.Tribe)...)
+	allPlayerData = append(allPlayerData, byte(playerData.UnknownByte1))
+	allPlayerData = append(allPlayerData, ConvertUint32Bytes(playerData.UnknownInt1)...)
+
+	allPlayerData = append(allPlayerData, ConvertUint16Bytes(len(playerData.UnknownArr1)/5)...)
+	for i := 0; i < len(playerData.UnknownArr1); i++ {
+		allPlayerData = append(allPlayerData, byte(playerData.UnknownArr1[i]))
+	}
+
+	allPlayerData = append(allPlayerData, ConvertUint32Bytes(playerData.Currency)...)
+	allPlayerData = append(allPlayerData, ConvertUint32Bytes(playerData.Score)...)
+	allPlayerData = append(allPlayerData, ConvertUint32Bytes(playerData.UnknownInt2)...)
+	allPlayerData = append(allPlayerData, ConvertUint16Bytes(playerData.NumCities)...)
+
+	allPlayerData = append(allPlayerData, ConvertUint16Bytes(len(playerData.AvailableTech))...)
+	for i := 0; i < len(playerData.AvailableTech); i++ {
+		allPlayerData = append(allPlayerData, ConvertUint16Bytes(playerData.AvailableTech[i])...)
+	}
+
+	allPlayerData = append(allPlayerData, ConvertUint16Bytes(len(playerData.EncounteredPlayers))...)
+	for i := 0; i < len(playerData.EncounteredPlayers); i++ {
+		allPlayerData = append(allPlayerData, byte(playerData.EncounteredPlayers[i]))
+	}
+
+	allPlayerData = append(allPlayerData, ConvertUint16Bytes(len(playerData.Tasks))...)
+	for i := 0; i < len(playerData.Tasks); i++ {
+		allPlayerData = append(allPlayerData, ConvertUint16Bytes(playerData.Tasks[i].Type)...)
+		allPlayerData = append(allPlayerData, playerData.Tasks[i].Buffer...)
+	}
+
+	allPlayerData = append(allPlayerData, ConvertUint32Bytes(playerData.TotalUnitsKilled)...)
+	allPlayerData = append(allPlayerData, ConvertUint32Bytes(playerData.TotalUnitsLost)...)
+	allPlayerData = append(allPlayerData, ConvertUint32Bytes(playerData.TotalTribesDestroyed)...)
+	allPlayerData = append(allPlayerData, playerData.OverrideColor...)
+
+	allPlayerData = append(allPlayerData, playerData.UnknownByte2)
+
+	allPlayerData = append(allPlayerData, ConvertUint16Bytes(len(playerData.UniqueImprovements))...)
+	for i := 0; i < len(playerData.UniqueImprovements); i++ {
+		allPlayerData = append(allPlayerData, ConvertUint16Bytes(playerData.UniqueImprovements[i])...)
+	}
+
+	allPlayerData = append(allPlayerData, ConvertUint16Bytes(len(playerData.DiplomacyArr))...)
+	for i := 0; i < len(playerData.DiplomacyArr); i++ {
+		allPlayerData = append(allPlayerData, ConvertDiplomacyDataToBytes(playerData.DiplomacyArr[i])...)
+	}
+
+	allPlayerData = append(allPlayerData, ConvertUint16Bytes(len(playerData.DiplomacyMessages))...)
+	for i := 0; i < len(playerData.DiplomacyMessages); i++ {
+		allPlayerData = append(allPlayerData, byte(playerData.DiplomacyMessages[i].MessageType))
+		allPlayerData = append(allPlayerData, byte(playerData.DiplomacyMessages[i].Sender))
+	}
+
+	allPlayerData = append(allPlayerData, byte(playerData.DestroyedByTribe))
+	allPlayerData = append(allPlayerData, ConvertUint32Bytes(playerData.DestroyedTurn)...)
+	allPlayerData = append(allPlayerData, playerData.UnknownBuffer2...)
+
+	return allPlayerData
+}
+
+func WriteTileToFile(inputFilename string, tileDataOverwrite TileData, targetX int, targetY int) {
+	saveOutput, err := ReadPolytopiaDecompressedFile(inputFilename)
+	if err != nil {
+		log.Fatal("Failed to read save file")
+	}
+	fmt.Println(fmt.Sprintf("Dimensions width: %v, height: %v", saveOutput.MapWidth, saveOutput.MapHeight))
+
+	tileBytes := ConvertTileToBytes(tileDataOverwrite)
+
+	inputFile, err := os.OpenFile(inputFilename, os.O_RDWR, 0644)
+	defer inputFile.Close()
+	if err != nil {
+		log.Fatal("Failed to load save state:", err)
+	}
+
+	offsetTileStart, ok := fileOffsetMap[buildTileStartKey(targetX, targetY)]
 	if !ok {
 		log.Fatal(fmt.Sprintf("Error: No tile start key on x: %v, y: %v. Command not run.", targetX, targetY))
 	}
+	offsetTileEnd, ok := fileOffsetMap[buildTileEndKey(targetX, targetY)]
+	if !ok {
+		log.Fatal(fmt.Sprintf("Error: No tile end key on x: %v, y: %v. Command not run.", targetX, targetY))
+	}
+	remainder := GetFileRemainingData(inputFile, offsetTileEnd)
+
+	if _, err := inputFile.WriteAt(tileBytes, int64(offsetTileStart)); err != nil {
+		log.Fatal(err)
+	}
+
+	// shift remaining data to the right
+	if _, err := inputFile.WriteAt(remainder, int64(offsetTileStart+len(tileBytes))); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func WriteMapToFile(inputFilename string, tileDataOverwrite [][]TileData, maxX int, maxY int) {
+	saveOutput, err := ReadPolytopiaDecompressedFile(inputFilename)
+	if err != nil {
+		log.Fatal("Failed to read save file")
+	}
+	fmt.Println(fmt.Sprintf("Dimensions width: %v, height: %v", saveOutput.MapWidth, saveOutput.MapHeight))
+
+	allTileBytes := ConvertMapDataToBytes(tileDataOverwrite)
+
+	inputFile, err := os.OpenFile(inputFilename, os.O_RDWR, 0644)
+	defer inputFile.Close()
+	if err != nil {
+		log.Fatal("Failed to load save state:", err)
+	}
+
+	offsetMapStart, ok := fileOffsetMap[buildTileStartKey(0, 0)]
+	if !ok {
+		log.Fatal(fmt.Sprintf("Error: No tile start key on x: %v, y: %v. Command not run.", 0, 0))
+	}
+	offsetMapEnd, ok := fileOffsetMap[buildTileEndKey(maxX, maxY)]
+	if !ok {
+		log.Fatal(fmt.Sprintf("Error: No tile end key on x: %v, y: %v. Command not run.", maxX, maxY))
+	}
+	remainder := GetFileRemainingData(inputFile, offsetMapEnd)
+
+	if _, err := inputFile.WriteAt(allTileBytes, int64(offsetMapStart)); err != nil {
+		log.Fatal(err)
+	}
+
+	// shift remaining data to the right
+	if _, err := inputFile.WriteAt(remainder, int64(offsetMapStart+len(allTileBytes))); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func ModifyPlayerColor(inputFilename string, playerId int, colorR int, colorG int, colorB int) {
+	offset, ok := fileOffsetMap[buildPlayerColorKey(playerId)]
+	if !ok {
+		log.Fatal(fmt.Sprintf("Error: No player color key on playerId: %v. Command not run.", playerId))
+	}
+
+	// write color
+	WriteUint8AtFileOffset(inputFilename, offset+0, colorB)
+	WriteUint8AtFileOffset(inputFilename, offset+1, colorG)
+	WriteUint8AtFileOffset(inputFilename, offset+2, colorR)
+	WriteUint8AtFileOffset(inputFilename, offset+3, 0)
+}
+
+func ModifyTileTerrain(inputFilename string, targetX int, targetY int, updatedValue int) {
+	saveOutput, err := ReadPolytopiaDecompressedFile(inputFilename)
+	if err != nil {
+		log.Fatal("Failed to read save file")
+	}
+
+	updatedTile := saveOutput.TileData[targetY][targetX]
 
 	// write terrain
-	WriteUint16AtFileOffset(inputFilename, offset+8, updatedValue)
+	updatedTile.Terrain = updatedValue
 
 	// write altitude
 	altitude := 0
@@ -110,31 +427,9 @@ func ModifyTileTerrain(inputFilename string, targetX int, targetY int, updatedVa
 	} else if updatedValue == 4 { // mountain altitude is 2
 		altitude = 2
 	}
-	WriteUint16AtFileOffset(inputFilename, offset+12, altitude)
-}
+	updatedTile.Altitude = altitude
 
-func ModifyTileOwner(inputFilename string, targetX int, targetY int, updatedValue int) {
-	offset, ok := fileOffsetMap[buildTileStartKey(targetX, targetY)]
-	if !ok {
-		log.Fatal(fmt.Sprintf("Error: No tile start key on x: %v, y: %v. Command not run.", targetX, targetY))
-	}
-
-	// write owner
-	WriteUint8AtFileOffset(inputFilename, offset+14, updatedValue)
-}
-
-func ModifyTileRoad(inputFilename string, targetX int, targetY int, updatedValue int) {
-	offset, ok := fileOffsetMap[buildTileRoadKey(targetX, targetY)]
-	if !ok {
-		log.Fatal(fmt.Sprintf("Error: No tile road key on x: %v, y: %v. Command not run.", targetX, targetY))
-	}
-
-	if updatedValue != 0 && updatedValue != 1 {
-		log.Fatal("New value must be 0 or 1")
-	}
-
-	// write road
-	WriteUint8AtFileOffset(inputFilename, offset, updatedValue)
+	WriteTileToFile(inputFilename, updatedTile, targetX, targetY)
 }
 
 func ModifyUnitTribe(inputFilename string, targetX int, targetY int, updatedValue int) {
@@ -148,31 +443,30 @@ func ModifyUnitTribe(inputFilename string, targetX int, targetY int, updatedValu
 }
 
 func BuildEmptyTile(x int, y int) []byte {
-	terrain := 3 // flat
-	climate := 1
-	altitude := 1
-	owner := 0
-	capital := 0
-	capitalX := -1
-	capitalY := -1
-
-	headerBytes := make([]byte, 0)
-	headerBytes = append(headerBytes, ConvertUint32Bytes(x)...)
-	headerBytes = append(headerBytes, ConvertUint32Bytes(y)...)
-	headerBytes = append(headerBytes, ConvertUint16Bytes(terrain)...)
-	headerBytes = append(headerBytes, ConvertUint16Bytes(climate)...)
-	headerBytes = append(headerBytes, ConvertUint16Bytes(altitude)...) // should be int16
-	headerBytes = append(headerBytes, byte(owner))
-	headerBytes = append(headerBytes, byte(capital))
-	headerBytes = append(headerBytes, ConvertUint32Bytes(capitalX)...) // should be int32
-	headerBytes = append(headerBytes, ConvertUint32Bytes(capitalY)...) // should be int32
-
-	remainingTileData := make([]byte, 10)
-	for i := 0; i < len(remainingTileData); i++ {
-		remainingTileData[i] = 0
+	tileData := TileData{
+		WorldCoordinates:   [2]int{x, y},
+		Terrain:            3,
+		Climate:            1,
+		Altitude:           1,
+		Owner:              0,
+		Capital:            0,
+		CapitalCoordinates: [2]int{-1, -1},
+		ResourceExists:     false,
+		ResourceType:       -1,
+		ImprovementExists:  false,
+		ImprovementType:    -1,
+		HasCity:            false,
+		CityName:           "",
+		CityData:           nil,
+		ImprovementData:    nil,
+		Unit:               nil,
+		BufferUnitData:     []uint8{},
+		PlayerVisibility:   []uint8{},
+		HasRoad:            false,
+		HasWaterRoute:      false,
+		Unknown:            []uint8{0, 0, 0, 0},
 	}
-
-	allTileData := append(headerBytes, remainingTileData...)
+	allTileData := ConvertTileToBytes(tileData)
 	return allTileData
 }
 
@@ -531,10 +825,31 @@ func RevealAllTiles(inputFilename string, newTribe int) {
 		for j := saveOutput.MapWidth - 1; j >= 0; j-- {
 			targetX := j
 			targetY := i
-			RevealTileForTribe(inputFilename, targetX, targetY, newTribe)
-			fmt.Println(fmt.Sprintf("Revealed (%v, %v) for tribe %v", targetX, targetY, newTribe))
+
+			visibilityData := saveOutput.TileData[i][j].PlayerVisibility
+			fmt.Println("Existing visibility data:", visibilityData)
+			isAlreadyVisible := false
+			for visibilityIndex := 0; visibilityIndex < len(visibilityData); visibilityIndex++ {
+				if int(visibilityData[visibilityIndex]) == newTribe {
+					fmt.Printf("Tile is already visible to tribe %v. No change will be made to visibility data.\n", newTribe)
+					isAlreadyVisible = true
+					break
+				}
+			}
+			if !isAlreadyVisible {
+				saveOutput.TileData[i][j].PlayerVisibility = append(saveOutput.TileData[i][j].PlayerVisibility, byte(newTribe))
+				fmt.Println(fmt.Sprintf("Revealed (%v, %v) for tribe %v", targetX, targetY, newTribe))
+			}
 		}
 	}
+
+	for i := saveOutput.MapHeight - 1; i >= 0; i-- {
+		for j := saveOutput.MapWidth - 1; j >= 0; j-- {
+			fmt.Println(fmt.Sprintf("Tile (%v, %v) visibility: %v", j, i, saveOutput.TileData[i][j].PlayerVisibility))
+		}
+	}
+
+	WriteMapToFile(inputFilename, saveOutput.TileData, saveOutput.MapWidth-1, saveOutput.MapHeight-1)
 }
 
 func RevealTileForTribe(inputFilename string, targetX int, targetY int, newTribe int) {
@@ -586,77 +901,54 @@ func RevealTileForTribe(inputFilename string, targetX int, targetY int, newTribe
 }
 
 func BuildEmptyPlayer(index int, playerName string, overrideColor color.RGBA) []byte {
-	allPlayerData := make([]byte, 0)
-
 	if index >= 254 {
 		log.Fatal("Over 255 players")
 	}
 
-	allPlayerData = append(allPlayerData, byte(index))
-	allPlayerData = append(allPlayerData, ConvertVarString(playerName)...)
-	accountId := "00000000-0000-0000-0000-000000000000"
-	allPlayerData = append(allPlayerData, ConvertVarString(accountId)...)
-	autoPlay := 1 // true for bot
-	allPlayerData = append(allPlayerData, byte(autoPlay))
-
-	// player start coordinates
-	allPlayerData = append(allPlayerData, ConvertUint32Bytes(0)...)
-	allPlayerData = append(allPlayerData, ConvertUint32Bytes(0)...)
-
-	tribe := 2
-	allPlayerData = append(allPlayerData, ConvertUint16Bytes(tribe)...)
-
-	// unknown
-	allPlayerData = append(allPlayerData, byte(1))
-	allPlayerData = append(allPlayerData, ConvertUint32Bytes(2)...)
-
 	// unknown array
 	newArraySize := index + 1
-	allPlayerData = append(allPlayerData, ConvertUint16Bytes(newArraySize)...)
+	unknownArr1 := make([]int, 0)
 	for i := 1; i <= int(newArraySize); i++ {
 		playerId := i
 		if i == newArraySize {
 			playerId = 255
 		}
-		allPlayerData = append(allPlayerData, byte(playerId))
+		unknownArr1 = append(unknownArr1, playerId)
 		// unknown
-		allPlayerData = append(allPlayerData, ConvertUint32Bytes(0)...)
+		unknownArr1 = append(unknownArr1, 0, 0, 0, 0)
 	}
 
-	startingCurrency := 5
-	allPlayerData = append(allPlayerData, ConvertUint32Bytes(startingCurrency)...)
-	score := 0
-	allPlayerData = append(allPlayerData, ConvertUint32Bytes(score)...)
-	// unknown int
-	allPlayerData = append(allPlayerData, ConvertUint32Bytes(0)...)
-	numCities := 1
-	allPlayerData = append(allPlayerData, ConvertUint16Bytes(numCities)...)
-
-	techArrSize := 0
-	allPlayerData = append(allPlayerData, ConvertUint16Bytes(techArrSize)...)
-	encounteredPlayersSize := 0
-	allPlayerData = append(allPlayerData, ConvertUint16Bytes(encounteredPlayersSize)...)
-	numTasks := 0
-	allPlayerData = append(allPlayerData, ConvertUint16Bytes(numTasks)...)
-
-	totalKills := 0
-	allPlayerData = append(allPlayerData, ConvertUint32Bytes(totalKills)...)
-	totalLosses := 0
-	allPlayerData = append(allPlayerData, ConvertUint32Bytes(totalLosses)...)
-	totalTribesDestroyed := 0
-	allPlayerData = append(allPlayerData, ConvertUint32Bytes(totalTribesDestroyed)...)
-	allPlayerData = append(allPlayerData, []byte{overrideColor.B, overrideColor.G, overrideColor.A, 0}...)
-
-	remainingPlayerData := make([]byte, 12)
-	for i := 0; i < len(remainingPlayerData); i++ {
-		remainingPlayerData[i] = 0
+	playerData := PlayerData{
+		Id:                   index,
+		Name:                 playerName,
+		AccountId:            "00000000-0000-0000-0000-000000000000",
+		AutoPlay:             true,
+		StartTileCoordinates: [2]int{0, 0},
+		Tribe:                2, // Ai-mo
+		UnknownByte1:         1,
+		UnknownInt1:          2,
+		UnknownArr1:          unknownArr1,
+		Currency:             5,
+		Score:                0,
+		UnknownInt2:          0,
+		NumCities:            1,
+		AvailableTech:        []int{},
+		EncounteredPlayers:   []int{},
+		Tasks:                []PlayerTaskData{},
+		TotalUnitsKilled:     0,
+		TotalUnitsLost:       0,
+		TotalTribesDestroyed: 0,
+		OverrideColor:        []byte{overrideColor.B, overrideColor.G, overrideColor.A, 0},
+		UnknownByte2:         0,
+		UniqueImprovements:   []int{},
+		DiplomacyArr:         []DiplomacyData{},
+		DiplomacyMessages:    []DiplomacyMessage{},
+		DestroyedByTribe:     0,
+		DestroyedTurn:        0,
+		UnknownBuffer2:       []byte{255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 255, 255, 255, 255},
 	}
-	allPlayerData = append(allPlayerData, remainingPlayerData...)
 
-	unknownBuffer2 := []byte{255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 255, 255, 255, 255}
-	allPlayerData = append(allPlayerData, unknownBuffer2...)
-
-	return allPlayerData
+	return ConvertPlayerDataToBytes(playerData)
 }
 
 func generateRandomColor() color.RGBA {
@@ -677,26 +969,26 @@ func convertIntArrToByteArr(intArr []int) []byte {
 
 func BuildNewPlayerUnknownArr(oldUnknownArr1 []int, newPlayerId int) []byte {
 	existingLen := len(oldUnknownArr1)
-	if existingLen % 5 != 0 {
-		log.Fatal("Invalid array length. There was an error in processing.")
+	if existingLen%5 != 0 {
+		log.Fatal(fmt.Sprintf("Invalid array length. New player unknown array length %v is not divisible by 5.", existingLen))
 	}
 
 	oldPlayerCount := existingLen / 5
 	oldMaximumPlayerId := oldPlayerCount - 1 // excludes player 255 nature
 	if oldMaximumPlayerId >= newPlayerId {
 		fmt.Println(fmt.Sprintf("Existing player count is %v, which includes players 1 to %v. No need to add player id %v.",
-			oldPlayerCount, oldPlayerCount - 1, newPlayerId))
+			oldPlayerCount, oldPlayerCount-1, newPlayerId))
 		return convertIntArrToByteArr(oldUnknownArr1)
 	} else {
 		fmt.Println(fmt.Sprintf("Existing player count is %v, which includes players 1 to %v. New player id %v needs to be included.",
-			oldPlayerCount, oldPlayerCount - 1, newPlayerId))
+			oldPlayerCount, oldPlayerCount-1, newPlayerId))
 	}
 
 	dataInsert := []int{newPlayerId, 0, 0, 0, 0}
 	// assumes player 255 is always last
-	existingPlayers := oldUnknownArr1[0 : existingLen - 5]
+	existingPlayers := oldUnknownArr1[0 : existingLen-5]
 	naturePlayer := make([]int, 5)
-	copy(naturePlayer, oldUnknownArr1[existingLen - 5 : existingLen])
+	copy(naturePlayer, oldUnknownArr1[existingLen-5:existingLen])
 
 	newUnknownArr1 := append(existingPlayers, dataInsert...)
 	newUnknownArr1 = append(newUnknownArr1, naturePlayer...)
@@ -704,7 +996,7 @@ func BuildNewPlayerUnknownArr(oldUnknownArr1 []int, newPlayerId int) []byte {
 }
 
 func convertPlayerIndexToId(playerIndex int, totalPlayers int) int {
-	if playerIndex == totalPlayers - 1 {
+	if playerIndex == totalPlayers-1 {
 		return 255
 	} else {
 		return playerIndex + 1

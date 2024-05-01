@@ -53,28 +53,34 @@ type TileDataHeader struct {
 }
 
 type TileData struct {
-	Header            TileDataHeader
-	Terrain           int
-	Climate           int
-	Owner             int
-	Capital           int
-	ResourceExists    bool
-	ResourceType      int
-	ImprovementExists bool
-	ImprovementType   int
-	HasCity           bool
-	CityName          string
-	CityData          *CityData
-	Unit              *UnitData
-	BufferUnitData    []byte
-	PlayerVisibility  []uint8
-	HasRoad           bool
-	HasWaterRoute     bool
-	Unknown           []byte
+	WorldCoordinates   [2]int
+	Terrain            int
+	Climate            int
+	Altitude           int
+	Owner              int
+	Capital            int
+	CapitalCoordinates [2]int
+	ResourceExists     bool
+	ResourceType       int
+	ImprovementExists  bool
+	ImprovementType    int
+	HasCity            bool
+	CityName           string
+	CityData           *CityData
+	ImprovementData    *ImprovementData
+	Unit               *UnitData
+	PreviousUnit       *UnitData
+	BufferUnitFlag     int
+	BufferUnitData     []byte
+	PlayerVisibility   []uint8
+	HasRoad            bool
+	HasWaterRoute      bool
+	Unknown            []byte
 }
 
 type CityData struct {
 	CityLevel              int
+	FoundedTurn            int
 	CurrentPopulation      int
 	TotalPopulation        int
 	UnknownShort1          int
@@ -82,9 +88,9 @@ type CityData struct {
 	UnknownShort2          int
 	UnknownShort3          int
 	ConnectedPlayerCapital int
-	UnknownByte1           int
+	HasCityName            int
 	CityName               string
-	FlagBeforeRewards      int
+	FoundedTribe           int
 	CityRewards            []int
 	RebellionFlag          int
 	RebellionBuffer        []byte
@@ -137,13 +143,18 @@ type UnitData struct {
 }
 
 type ImprovementData struct {
-	Level       uint16
-	Founded     uint16
-	Unknown1    [6]byte
-	BaseScore   uint16
-	Unknown2    [6]byte
-	UnknownInt1 uint16
-	Unknown3    [3]byte
+	Level                  uint16
+	FoundedTurn            uint16
+	CurrentPopulation      uint16
+	TotalPopulation        uint16
+	UnknownShort1          uint16
+	BaseScore              uint16
+	Unknown2               [2]uint16
+	ConnectedPlayerCapital uint8
+	HasCityName            uint8
+	FoundedTribe           uint8
+	RewardsSize            uint16
+	RebellionFlag          uint16
 }
 
 type PlayerTaskData struct {
@@ -184,6 +195,7 @@ type CityLocationData struct {
 	X        int
 	Y        int
 	CityName string
+	Capital  int
 }
 
 type UnitLocationData struct {
@@ -255,7 +267,8 @@ func readFixedList(streamReader *io.SectionReader, listSize int) []byte {
 }
 
 func readCityData(streamReader *io.SectionReader) CityData {
-	cityLevel := unsafeReadUint32(streamReader)
+	cityLevel := unsafeReadUint16(streamReader)
+	foundedTurn := unsafeReadInt16(streamReader)
 	currentPopulation := unsafeReadInt16(streamReader)
 	totalPopulation := unsafeReadUint16(streamReader)
 	unknownShort1 := unsafeReadInt16(streamReader)
@@ -263,12 +276,15 @@ func readCityData(streamReader *io.SectionReader) CityData {
 	unknownShort2 := unsafeReadInt16(streamReader)
 	unknownShort3 := unsafeReadInt16(streamReader)
 	connectedPlayerCapital := unsafeReadUint8(streamReader)
-	unknownByte1 := unsafeReadUint8(streamReader)
+	hasCityName := unsafeReadUint8(streamReader)
+	if hasCityName != 1 {
+		log.Fatal("City is missing name")
+	}
 	cityName := readVarString(streamReader, "CityName")
 
-	flagBeforeRewards := unsafeReadUint8(streamReader)
-	if flagBeforeRewards != 0 {
-		log.Fatal("flagBeforeRewards isn't 0")
+	foundedTribe := unsafeReadUint8(streamReader)
+	if foundedTribe != 0 {
+		log.Fatal("foundedTribe isn't 0")
 	}
 
 	cityRewardsSize := unsafeReadUint16(streamReader)
@@ -286,6 +302,7 @@ func readCityData(streamReader *io.SectionReader) CityData {
 
 	return CityData{
 		CityLevel:              int(cityLevel),
+		FoundedTurn:            int(foundedTurn),
 		CurrentPopulation:      int(currentPopulation),
 		TotalPopulation:        int(totalPopulation),
 		UnknownShort1:          int(unknownShort1),
@@ -293,9 +310,9 @@ func readCityData(streamReader *io.SectionReader) CityData {
 		UnknownShort2:          int(unknownShort2),
 		UnknownShort3:          int(unknownShort3),
 		ConnectedPlayerCapital: int(connectedPlayerCapital),
-		UnknownByte1:           int(unknownByte1),
+		HasCityName:            int(hasCityName),
 		CityName:               cityName,
-		FlagBeforeRewards:      int(flagBeforeRewards),
+		FoundedTribe:           int(foundedTribe),
 		CityRewards:            cityRewards,
 		RebellionFlag:          int(rebellionFlag),
 		RebellionBuffer:        rebellionBuffer,
@@ -337,12 +354,13 @@ func readTileData(streamReader *io.SectionReader, tileData [][]TileData, mapWidt
 
 			// If tile is city, read differently
 			var cityData CityData
+			var improvementData ImprovementData
 			if tileDataHeader.Owner > 0 && resourceType == -1 && improvementType == 1 {
 				// No resource, but has improvement that is city
 				cityData = readCityData(streamReader)
 			} else if improvementType != -1 {
 				// Has improvement and read improvement data
-				improvementData := ImprovementData{}
+				improvementData = ImprovementData{}
 				if err := binary.Read(streamReader, binary.LittleEndian, &improvementData); err != nil {
 					log.Fatal("Failed to load buffer: ", err)
 				}
@@ -354,6 +372,8 @@ func readTileData(streamReader *io.SectionReader, tileData [][]TileData, mapWidt
 			// Read unit data
 			hasUnitFlag := unsafeReadUint8(streamReader)
 			var unitDataPtr *UnitData
+			var previousUnitDataPtr *UnitData
+			var bufferUnitFlag int
 			bufferUnitData := make([]byte, 0)
 			if hasUnitFlag == 1 {
 				unitLocationKey := buildUnitLocationKey(int(tileDataHeader.WorldCoordinates[0]), int(tileDataHeader.WorldCoordinates[1]))
@@ -377,8 +397,9 @@ func readTileData(streamReader *io.SectionReader, tileData [][]TileData, mapWidt
 					if err := binary.Read(streamReader, binary.LittleEndian, &previousUnitData); err != nil {
 						log.Fatal("Failed to load buffer: ", err)
 					}
+					previousUnitDataPtr = &previousUnitData
 
-					_ = unsafeReadUint8(streamReader)
+					bufferUnitFlag = int(unsafeReadUint8(streamReader))
 					bufferUnitData2 := readFixedList(streamReader, 7)
 					bufferUnitData3 := readFixedList(streamReader, 7)
 					if bufferUnitData2[0] == 1 {
@@ -388,7 +409,7 @@ func readTileData(streamReader *io.SectionReader, tileData [][]TileData, mapWidt
 					bufferUnitData = append(bufferUnitData, bufferUnitData2...)
 					bufferUnitData = append(bufferUnitData, bufferUnitData3...)
 				} else {
-					bufferUnitFlag := unsafeReadUint8(streamReader)
+					bufferUnitFlag = int(unsafeReadUint8(streamReader))
 					bufferSize := 6
 					if bufferUnitFlag == 1 {
 						bufferSize = 8
@@ -402,11 +423,7 @@ func readTileData(streamReader *io.SectionReader, tileData [][]TileData, mapWidt
 			updateFileOffsetMap(fileOffsetMap, streamReader, tileVisibilityLocationKey)
 			playerVisibilityListSize := unsafeReadUint8(streamReader)
 			playerVisibilityList := readFixedList(streamReader, int(playerVisibilityListSize))
-
-			tileRoadKey := buildTileRoadKey(int(tileDataHeader.WorldCoordinates[0]), int(tileDataHeader.WorldCoordinates[1]))
-			updateFileOffsetMap(fileOffsetMap, streamReader, tileRoadKey)
 			hasRoad := unsafeReadUint8(streamReader)
-
 			hasWaterRoute := unsafeReadUint8(streamReader)
 			unknown := readFixedList(streamReader, 4)
 
@@ -423,24 +440,29 @@ func readTileData(streamReader *io.SectionReader, tileData [][]TileData, mapWidt
 			}
 
 			tileData[i][j] = TileData{
-				Header:            tileDataHeader,
-				Terrain:           int(tileDataHeader.Terrain),
-				Climate:           int(tileDataHeader.Climate),
-				Owner:             int(tileDataHeader.Owner),
-				Capital:           int(tileDataHeader.Capital),
-				HasCity:           hasCity,
-				CityName:          cityName,
-				CityData:          cityDataPtr,
-				Unit:              unitDataPtr,
-				BufferUnitData:    bufferUnitData,
-				PlayerVisibility:  playerVisibilityList,
-				HasRoad:           hasRoad != 0,
-				HasWaterRoute:     hasWaterRoute != 0,
-				Unknown:           unknown,
-				ResourceExists:    resourceExistsFlag != 0,
-				ResourceType:      resourceType,
-				ImprovementExists: improvementExistsFlag != 0,
-				ImprovementType:   improvementType,
+				WorldCoordinates:   [2]int{int(tileDataHeader.WorldCoordinates[0]), int(tileDataHeader.WorldCoordinates[1])},
+				Terrain:            int(tileDataHeader.Terrain),
+				Climate:            int(tileDataHeader.Climate),
+				Altitude:           int(tileDataHeader.Altitude),
+				Owner:              int(tileDataHeader.Owner),
+				Capital:            int(tileDataHeader.Capital),
+				CapitalCoordinates: [2]int{int(tileDataHeader.CapitalCoordinates[0]), int(tileDataHeader.CapitalCoordinates[1])},
+				HasCity:            hasCity,
+				CityName:           cityName,
+				CityData:           cityDataPtr,
+				ImprovementData:    &improvementData,
+				Unit:               unitDataPtr,
+				PreviousUnit:       previousUnitDataPtr,
+				BufferUnitFlag:     bufferUnitFlag,
+				BufferUnitData:     bufferUnitData,
+				PlayerVisibility:   playerVisibilityList,
+				HasRoad:            hasRoad != 0,
+				HasWaterRoute:      hasWaterRoute != 0,
+				Unknown:            unknown,
+				ResourceExists:     resourceExistsFlag != 0,
+				ResourceType:       resourceType,
+				ImprovementExists:  improvementExistsFlag != 0,
+				ImprovementType:    improvementType,
 			}
 
 			tileEndKey := buildTileEndKey(int(tileDataHeader.WorldCoordinates[0]), int(tileDataHeader.WorldCoordinates[1]))
@@ -578,6 +600,8 @@ func readPlayerData(streamReader *io.SectionReader) PlayerData {
 	totalKills := unsafeReadInt32(streamReader)
 	totalLosses := unsafeReadInt32(streamReader)
 	totalTribesDestroyed := unsafeReadInt32(streamReader)
+	playerColorKey := buildPlayerColorKey(int(playerId))
+	updateFileOffsetMap(fileOffsetMap, streamReader, playerColorKey)
 	overrideColor := readFixedList(streamReader, 4)
 	unknownByte2 := unsafeReadUint8(streamReader)
 
@@ -701,9 +725,10 @@ func buildTribeCityMap(currentMapHeaderOutput MapHeaderOutput, tileData [][]Tile
 					tribeCityMap[tribeOwner] = make([]CityLocationData, 0)
 				}
 				cityLocationData := CityLocationData{
-					X:        int(tileData[i][j].Header.WorldCoordinates[0]),
-					Y:        int(tileData[i][j].Header.WorldCoordinates[1]),
+					X:        tileData[i][j].WorldCoordinates[0],
+					Y:        tileData[i][j].WorldCoordinates[1],
 					CityName: tileData[i][j].CityName,
+					Capital:  tileData[i][j].Capital,
 				}
 				tribeCityMap[tribeOwner] = append(tribeCityMap[tribeOwner], cityLocationData)
 			}

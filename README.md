@@ -20,6 +20,7 @@ Read-only commands:
 
 1. list-cities: List all cities owned by each tribe. The city name and location will be shown.
 2. list-units: List all units owned by each tribe. The unit type and location will be shown.
+3. list-players: List all players in the game.
 
 Commands to modify units:
 
@@ -66,6 +67,7 @@ Commands to modify tiles for all players:
 1. modify-tile-terrain
 2. modify-tile-owner
 3. modify-tile-road
+4. modify-tile-capital
 
 Commands to modify map dimensions:
 1. expand-map-rows
@@ -74,6 +76,10 @@ Commands to modify map dimensions:
 
 Commands to modify players:
 1. add-player
+2. modify-player-color
+
+Commands to modify the game:
+1. reset-game: Resets the map back to the original state
 
 The commands to modify the file will make changes within the decompressed file.
 
@@ -99,3 +105,9 @@ Make sure you quit your current Polytopia game and go to the main menu before ov
 2. Copy new file to save directory and overwrite existing save file in Singleplayer/ folder.
 3. Go the main menu and click "Resume Game"
 4. You should see all your changes take effect in the game.
+
+## Unit Tests
+
+```
+go test -v ./...
+```

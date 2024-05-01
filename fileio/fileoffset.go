@@ -34,10 +34,6 @@ func buildTileImprovementEndKey(x int, y int) string {
 	return fmt.Sprintf("TileImprovementEnd%v,%v", x, y)
 }
 
-func buildTileRoadKey(x int, y int) string {
-	return fmt.Sprintf("TileRoad%v,%v", x, y)
-}
-
 func buildNumPlayersKey() string {
 	return "NumPlayers"
 }
@@ -47,11 +43,15 @@ func buildPlayerStartKey(index int) string {
 }
 
 func buildPlayerArr1Key(playerId int) string {
-	return fmt.Sprintf("PlayerArr1-Id%v",playerId)
+	return fmt.Sprintf("PlayerArr1-Id%v", playerId)
+}
+
+func buildPlayerColorKey(playerId int) string {
+	return fmt.Sprintf("PlayerColor-Id%v", playerId)
 }
 
 func buildPlayerCurrencyKey(playerId int) string {
-	return fmt.Sprintf("PlayerCurrency-Id%v",playerId)
+	return fmt.Sprintf("PlayerCurrency-Id%v", playerId)
 }
 
 func GetUnitLocationFileOffset(targetX int, targetY int) int {
