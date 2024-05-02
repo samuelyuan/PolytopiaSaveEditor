@@ -6,6 +6,14 @@ import (
 	"log"
 )
 
+func buildMapStartKey() string {
+	return "MapStart"
+}
+
+func buildMapEndKey() string {
+	return "MapEnd"
+}
+
 func buildUnitLocationKey(x int, y int) string {
 	return fmt.Sprintf("UnitLocation%v,%v", x, y)
 }
@@ -34,8 +42,12 @@ func buildTileImprovementEndKey(x int, y int) string {
 	return fmt.Sprintf("TileImprovementEnd%v,%v", x, y)
 }
 
-func buildNumPlayersKey() string {
-	return "NumPlayers"
+func buildAllPlayersStartKey() string {
+	return "AllPlayersStart"
+}
+
+func buildAllPlayersEndKey() string {
+	return "AllPlayersEnd"
 }
 
 func buildPlayerStartKey(index int) string {
@@ -44,10 +56,6 @@ func buildPlayerStartKey(index int) string {
 
 func buildPlayerArr1Key(playerId int) string {
 	return fmt.Sprintf("PlayerArr1-Id%v", playerId)
-}
-
-func buildPlayerColorKey(playerId int) string {
-	return fmt.Sprintf("PlayerColor-Id%v", playerId)
 }
 
 func buildPlayerCurrencyKey(playerId int) string {

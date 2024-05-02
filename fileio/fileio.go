@@ -65,14 +65,13 @@ type TileData struct {
 	ImprovementExists  bool
 	ImprovementType    int
 	HasCity            bool
-	CityName           string
 	CityData           *CityData
 	ImprovementData    *ImprovementData
 	Unit               *UnitData
 	PreviousUnit       *UnitData
 	BufferUnitFlag     int
 	BufferUnitData     []byte
-	PlayerVisibility   []uint8
+	PlayerVisibility   []int
 	HasRoad            bool
 	HasWaterRoute      bool
 	Unknown            []byte
@@ -116,7 +115,7 @@ type PlayerData struct {
 	TotalUnitsKilled     int
 	TotalUnitsLost       int
 	TotalTribesDestroyed int
-	OverrideColor        []byte
+	OverrideColor        []int
 	UnknownByte2         byte
 	UniqueImprovements   []int
 	DiplomacyArr         []DiplomacyData
@@ -179,16 +178,17 @@ type DiplomacyData struct {
 }
 
 type PolytopiaSaveOutput struct {
-	MapHeight       int
-	MapWidth        int
-	OwnerTribeMap   map[int]int
-	InitialTileData [][]TileData
-	TileData        [][]TileData
-	MaxTurn         int
-	PlayerData      []PlayerData
-	FileOffsetMap   map[string]int
-	TribeCityMap    map[int][]CityLocationData
-	TribeUnitMap    map[int][]UnitLocationData
+	MapHeight         int
+	MapWidth          int
+	OwnerTribeMap     map[int]int
+	InitialTileData   [][]TileData
+	InitialPlayerData []PlayerData
+	TileData          [][]TileData
+	MaxTurn           int
+	PlayerData        []PlayerData
+	FileOffsetMap     map[string]int
+	TribeCityMap      map[int][]CityLocationData
+	TribeUnitMap      map[int][]UnitLocationData
 }
 
 type CityLocationData struct {
@@ -266,6 +266,14 @@ func readFixedList(streamReader *io.SectionReader, listSize int) []byte {
 	return buffer
 }
 
+func convertByteListToInt(oldArr []byte) []int {
+	newArr := make([]int, len(oldArr))
+	for i := 0; i < len(newArr); i++ {
+		newArr[i] = int(oldArr[i])
+	}
+	return newArr
+}
+
 func readCityData(streamReader *io.SectionReader) CityData {
 	cityLevel := unsafeReadUint16(streamReader)
 	foundedTurn := unsafeReadInt16(streamReader)
@@ -321,6 +329,8 @@ func readCityData(streamReader *io.SectionReader) CityData {
 
 func readTileData(streamReader *io.SectionReader, tileData [][]TileData, mapWidth int, mapHeight int) {
 	allUnitData := make([]UnitData, 0)
+
+	updateFileOffsetMap(fileOffsetMap, streamReader, buildMapStartKey())
 
 	for i := 0; i < int(mapHeight); i++ {
 		for j := 0; j < int(mapWidth); j++ {
@@ -422,19 +432,17 @@ func readTileData(streamReader *io.SectionReader, tileData [][]TileData, mapWidt
 			tileVisibilityLocationKey := buildTileVisibilityLocationKey(int(tileDataHeader.WorldCoordinates[0]), int(tileDataHeader.WorldCoordinates[1]))
 			updateFileOffsetMap(fileOffsetMap, streamReader, tileVisibilityLocationKey)
 			playerVisibilityListSize := unsafeReadUint8(streamReader)
-			playerVisibilityList := readFixedList(streamReader, int(playerVisibilityListSize))
+			playerVisibilityList := convertByteListToInt(readFixedList(streamReader, int(playerVisibilityListSize)))
 			hasRoad := unsafeReadUint8(streamReader)
 			hasWaterRoute := unsafeReadUint8(streamReader)
 			unknown := readFixedList(streamReader, 4)
 
 			hasCity := false
-			cityName := ""
 			var cityDataPtr *CityData
 			if improvementType == 1 {
 				hasCity = true
 
 				if tileDataHeader.Owner > 0 {
-					cityName = cityData.CityName
 					cityDataPtr = &cityData
 				}
 			}
@@ -448,7 +456,6 @@ func readTileData(streamReader *io.SectionReader, tileData [][]TileData, mapWidt
 				Capital:            int(tileDataHeader.Capital),
 				CapitalCoordinates: [2]int{int(tileDataHeader.CapitalCoordinates[0]), int(tileDataHeader.CapitalCoordinates[1])},
 				HasCity:            hasCity,
-				CityName:           cityName,
 				CityData:           cityDataPtr,
 				ImprovementData:    &improvementData,
 				Unit:               unitDataPtr,
@@ -473,6 +480,8 @@ func readTileData(streamReader *io.SectionReader, tileData [][]TileData, mapWidt
 			}
 		}
 	}
+
+	updateFileOffsetMap(fileOffsetMap, streamReader, buildMapEndKey())
 }
 
 func readMapHeader(streamReader *io.SectionReader) MapHeaderOutput {
@@ -600,9 +609,7 @@ func readPlayerData(streamReader *io.SectionReader) PlayerData {
 	totalKills := unsafeReadInt32(streamReader)
 	totalLosses := unsafeReadInt32(streamReader)
 	totalTribesDestroyed := unsafeReadInt32(streamReader)
-	playerColorKey := buildPlayerColorKey(int(playerId))
-	updateFileOffsetMap(fileOffsetMap, streamReader, playerColorKey)
-	overrideColor := readFixedList(streamReader, 4)
+	overrideColor := convertByteListToInt(readFixedList(streamReader, 4))
 	unknownByte2 := unsafeReadUint8(streamReader)
 
 	playerUniqueImprovementsSize := unsafeReadUint16(streamReader)
@@ -670,8 +677,9 @@ func readPlayerData(streamReader *io.SectionReader) PlayerData {
 }
 
 func readAllPlayerData(streamReader *io.SectionReader) []PlayerData {
-	numPlayersKey := buildNumPlayersKey()
-	updateFileOffsetMap(fileOffsetMap, streamReader, numPlayersKey)
+	allPlayersStartKey := buildAllPlayersStartKey()
+	updateFileOffsetMap(fileOffsetMap, streamReader, allPlayersStartKey)
+
 	numPlayers := unsafeReadUint16(streamReader)
 	fmt.Println("Num players:", numPlayers)
 	allPlayerData := make([]PlayerData, int(numPlayers))
@@ -682,6 +690,10 @@ func readAllPlayerData(streamReader *io.SectionReader) []PlayerData {
 		playerData := readPlayerData(streamReader)
 		allPlayerData[i] = playerData
 	}
+
+	allPlayersEndKey := buildAllPlayersEndKey()
+	updateFileOffsetMap(fileOffsetMap, streamReader, allPlayersEndKey)
+
 	return allPlayerData
 }
 
@@ -724,10 +736,16 @@ func buildTribeCityMap(currentMapHeaderOutput MapHeaderOutput, tileData [][]Tile
 				if !ok {
 					tribeCityMap[tribeOwner] = make([]CityLocationData, 0)
 				}
+
+				cityName := ""
+				if tileData[i][j].CityData != nil {
+					cityName = tileData[i][j].CityData.CityName
+				}
+
 				cityLocationData := CityLocationData{
 					X:        tileData[i][j].WorldCoordinates[0],
 					Y:        tileData[i][j].WorldCoordinates[1],
-					CityName: tileData[i][j].CityName,
+					CityName: cityName,
 					Capital:  tileData[i][j].Capital,
 				}
 				tribeCityMap[tribeOwner] = append(tribeCityMap[tribeOwner], cityLocationData)
@@ -763,7 +781,8 @@ func ReadPolytopiaDecompressedFile(inputFilename string) (*PolytopiaSaveOutput, 
 		initialTileData[i] = make([]TileData, initialMapHeaderOutput.MapWidth)
 	}
 	readTileData(streamReader, initialTileData, initialMapHeaderOutput.MapWidth, initialMapHeaderOutput.MapHeight)
-	ownerTribeMap := buildOwnerTribeMap(readAllPlayerData(streamReader))
+	initialPlayerData := readAllPlayerData(streamReader)
+	ownerTribeMap := buildOwnerTribeMap(initialPlayerData)
 
 	_ = readFixedList(streamReader, 3)
 
@@ -781,16 +800,17 @@ func ReadPolytopiaDecompressedFile(inputFilename string) (*PolytopiaSaveOutput, 
 	tribeCityMap := buildTribeCityMap(currentMapHeaderOutput, tileData)
 
 	output := &PolytopiaSaveOutput{
-		MapHeight:       currentMapHeaderOutput.MapHeight,
-		MapWidth:        currentMapHeaderOutput.MapWidth,
-		OwnerTribeMap:   ownerTribeMap,
-		InitialTileData: initialTileData,
-		TileData:        tileData,
-		MaxTurn:         int(currentMapHeaderOutput.MapHeaderInput.CurrentTurn),
-		PlayerData:      playerData,
-		FileOffsetMap:   fileOffsetMap,
-		TribeCityMap:    tribeCityMap,
-		TribeUnitMap:    tribeUnitMap,
+		MapHeight:         currentMapHeaderOutput.MapHeight,
+		MapWidth:          currentMapHeaderOutput.MapWidth,
+		OwnerTribeMap:     ownerTribeMap,
+		InitialTileData:   initialTileData,
+		InitialPlayerData: initialPlayerData,
+		TileData:          tileData,
+		MaxTurn:           int(currentMapHeaderOutput.MapHeaderInput.CurrentTurn),
+		PlayerData:        playerData,
+		FileOffsetMap:     fileOffsetMap,
+		TribeCityMap:      tribeCityMap,
+		TribeUnitMap:      tribeUnitMap,
 	}
 	return output, nil
 }

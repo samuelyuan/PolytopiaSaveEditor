@@ -100,12 +100,11 @@ func TestConvertEmptyTileDataToBytes(t *testing.T) {
 		ImprovementExists:  false,
 		ImprovementType:    -1,
 		HasCity:            false,
-		CityName:           "",
 		CityData:           nil,
 		ImprovementData:    nil,
 		Unit:               nil,
 		BufferUnitData:     []uint8{},
-		PlayerVisibility:   []uint8{},
+		PlayerVisibility:   []int{},
 		HasRoad:            false,
 		HasWaterRoute:      false,
 		Unknown:            []uint8{0, 0, 0, 0},
@@ -139,7 +138,6 @@ func TestConvertTileDataToBytes(t *testing.T) {
 		ImprovementExists:  true,
 		ImprovementType:    1,
 		HasCity:            true,
-		CityName:           "",
 		CityData:           nil,
 		ImprovementData: &ImprovementData{
 			Level:                  1,
@@ -157,7 +155,7 @@ func TestConvertTileDataToBytes(t *testing.T) {
 		},
 		Unit:             nil,
 		BufferUnitData:   []uint8{},
-		PlayerVisibility: []uint8{},
+		PlayerVisibility: []int{},
 		HasRoad:          false,
 		HasWaterRoute:    false,
 		Unknown:          []uint8{0, 0, 0, 0},
@@ -207,7 +205,7 @@ func TestConvertPlayerDataToBytes(t *testing.T) {
 		TotalUnitsKilled:     28,
 		TotalUnitsLost:       32,
 		TotalTribesDestroyed: 1,
-		OverrideColor:        []byte{153, 0, 255, 255},
+		OverrideColor:        []int{153, 0, 255, 255},
 		UnknownByte2:         0,
 		UniqueImprovements:   []int{27},
 		DiplomacyArr: []DiplomacyData{
@@ -319,7 +317,7 @@ func TestBuildNewPlayerUnknownArr(t *testing.T) {
 		11, 74, 89, 0, 0, 12, 7, 125, 0, 0, 13, 74, 69, 0, 0, 14, 66, 163, 0, 0, 15, 165, 216, 0, 0,
 		16, 41, 125, 0, 0, 17, 0, 0, 0, 0, 255, 0, 0, 0, 0}
 	if !reflect.DeepEqual(resultBytesWithChange, expectedBytesWithChange) {
-		t.Fatalf(`Change to include player 17,  failed. Result = %v, expected = %v`, resultBytesWithChange, expectedBytesWithChange)
+		t.Fatalf(`Change to include player 17 failed. Result = %v, expected = %v`, resultBytesWithChange, expectedBytesWithChange)
 	}
 }
 

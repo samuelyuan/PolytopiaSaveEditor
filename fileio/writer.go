@@ -71,6 +71,43 @@ func GetFileRemainingData(inputFile *os.File, offset int) []byte {
 	return remainder
 }
 
+func WriteAndShiftData(inputFilename string, offsetStartOriginalBlockKey string, offsetEndOriginalBlockKey string, newData []byte) {
+	// Update file offsets to make sure they are up to date
+	saveOutput, err := ReadPolytopiaDecompressedFile(inputFilename)
+	if err != nil {
+		log.Fatal("Failed to read save file")
+	}
+	fmt.Println(fmt.Sprintf("Dimensions width: %v, height: %v", saveOutput.MapWidth, saveOutput.MapHeight))
+
+	// Open file to modify
+	inputFile, err := os.OpenFile(inputFilename, os.O_RDWR, 0644)
+	defer inputFile.Close()
+	if err != nil {
+		log.Fatal("Failed to load save state:", err)
+	}
+
+	offsetOriginalBlockStart, ok := fileOffsetMap[offsetStartOriginalBlockKey]
+	if !ok {
+		log.Fatal(fmt.Sprintf("Error: Unable to find start of data block with key %v. Command not run.", offsetStartOriginalBlockKey))
+	}
+	offsetOriginalBlockEnd, ok := fileOffsetMap[offsetEndOriginalBlockKey]
+	if !ok {
+		log.Fatal(fmt.Sprintf("Error: Unable to find end of data block with key %v. Command not run.", offsetStartOriginalBlockKey))
+	}
+	// Get all data after end of block
+	remainder := GetFileRemainingData(inputFile, offsetOriginalBlockEnd)
+
+	// overwrite block with new data at original block start
+	if _, err := inputFile.WriteAt(newData, int64(offsetOriginalBlockStart)); err != nil {
+		log.Fatal(err)
+	}
+
+	// shift remaining data and write after new data instead of original end start
+	if _, err := inputFile.WriteAt(remainder, int64(offsetOriginalBlockStart+len(newData))); err != nil {
+		log.Fatal(err)
+	}
+}
+
 func ConvertUint32Bytes(value int) []byte {
 	byteArr := make([]byte, 4)
 	binary.LittleEndian.PutUint32(byteArr, uint32(value))
@@ -88,6 +125,18 @@ func ConvertVarString(value string) []byte {
 	byteArr = append(byteArr, byte(len(value)))
 	byteArr = append(byteArr, []byte(value)...)
 	return byteArr
+}
+
+func ConvertByteList(oldArr []int) []byte {
+	// the values are stored as ints but they were originally bytes
+	newArr := make([]byte, len(oldArr))
+	for i := 0; i < len(oldArr); i++ {
+		if oldArr[i] > 255 {
+			log.Fatal("Byte list has value over 255")
+		}
+		newArr[i] = byte(oldArr[i])
+	}
+	return newArr
 }
 
 func ConvertBoolToByte(value bool) byte {
@@ -219,7 +268,7 @@ func ConvertTileToBytes(tileData TileData) []byte {
 	}
 
 	tileBytes = append(tileBytes, byte(len(tileData.PlayerVisibility)))
-	tileBytes = append(tileBytes, tileData.PlayerVisibility...)
+	tileBytes = append(tileBytes, ConvertByteList(tileData.PlayerVisibility)...)
 	tileBytes = append(tileBytes, ConvertBoolToByte(tileData.HasRoad))
 	tileBytes = append(tileBytes, ConvertBoolToByte(tileData.HasWaterRoute))
 	tileBytes = append(tileBytes, tileData.Unknown...)
@@ -295,7 +344,7 @@ func ConvertPlayerDataToBytes(playerData PlayerData) []byte {
 	allPlayerData = append(allPlayerData, ConvertUint32Bytes(playerData.TotalUnitsKilled)...)
 	allPlayerData = append(allPlayerData, ConvertUint32Bytes(playerData.TotalUnitsLost)...)
 	allPlayerData = append(allPlayerData, ConvertUint32Bytes(playerData.TotalTribesDestroyed)...)
-	allPlayerData = append(allPlayerData, playerData.OverrideColor...)
+	allPlayerData = append(allPlayerData, ConvertByteList(playerData.OverrideColor)...)
 
 	allPlayerData = append(allPlayerData, playerData.UnknownByte2)
 
@@ -322,87 +371,28 @@ func ConvertPlayerDataToBytes(playerData PlayerData) []byte {
 	return allPlayerData
 }
 
+func ConvertAllPlayerDataToBytes(allPlayerData []PlayerData) []byte {
+	allPlayerBytes := make([]byte, 0)
+	allPlayerBytes = append(allPlayerBytes, ConvertUint16Bytes(len(allPlayerData))...)
+	for i := 0; i < len(allPlayerData); i++ {
+		allPlayerBytes = append(allPlayerBytes, ConvertPlayerDataToBytes(allPlayerData[i])...)
+	}
+	return allPlayerBytes
+}
+
 func WriteTileToFile(inputFilename string, tileDataOverwrite TileData, targetX int, targetY int) {
-	saveOutput, err := ReadPolytopiaDecompressedFile(inputFilename)
-	if err != nil {
-		log.Fatal("Failed to read save file")
-	}
-	fmt.Println(fmt.Sprintf("Dimensions width: %v, height: %v", saveOutput.MapWidth, saveOutput.MapHeight))
-
 	tileBytes := ConvertTileToBytes(tileDataOverwrite)
-
-	inputFile, err := os.OpenFile(inputFilename, os.O_RDWR, 0644)
-	defer inputFile.Close()
-	if err != nil {
-		log.Fatal("Failed to load save state:", err)
-	}
-
-	offsetTileStart, ok := fileOffsetMap[buildTileStartKey(targetX, targetY)]
-	if !ok {
-		log.Fatal(fmt.Sprintf("Error: No tile start key on x: %v, y: %v. Command not run.", targetX, targetY))
-	}
-	offsetTileEnd, ok := fileOffsetMap[buildTileEndKey(targetX, targetY)]
-	if !ok {
-		log.Fatal(fmt.Sprintf("Error: No tile end key on x: %v, y: %v. Command not run.", targetX, targetY))
-	}
-	remainder := GetFileRemainingData(inputFile, offsetTileEnd)
-
-	if _, err := inputFile.WriteAt(tileBytes, int64(offsetTileStart)); err != nil {
-		log.Fatal(err)
-	}
-
-	// shift remaining data to the right
-	if _, err := inputFile.WriteAt(remainder, int64(offsetTileStart+len(tileBytes))); err != nil {
-		log.Fatal(err)
-	}
+	WriteAndShiftData(inputFilename, buildTileStartKey(targetX, targetY), buildTileEndKey(targetX, targetY), tileBytes)
 }
 
-func WriteMapToFile(inputFilename string, tileDataOverwrite [][]TileData, maxX int, maxY int) {
-	saveOutput, err := ReadPolytopiaDecompressedFile(inputFilename)
-	if err != nil {
-		log.Fatal("Failed to read save file")
-	}
-	fmt.Println(fmt.Sprintf("Dimensions width: %v, height: %v", saveOutput.MapWidth, saveOutput.MapHeight))
-
+func WriteMapToFile(inputFilename string, tileDataOverwrite [][]TileData) {
 	allTileBytes := ConvertMapDataToBytes(tileDataOverwrite)
-
-	inputFile, err := os.OpenFile(inputFilename, os.O_RDWR, 0644)
-	defer inputFile.Close()
-	if err != nil {
-		log.Fatal("Failed to load save state:", err)
-	}
-
-	offsetMapStart, ok := fileOffsetMap[buildTileStartKey(0, 0)]
-	if !ok {
-		log.Fatal(fmt.Sprintf("Error: No tile start key on x: %v, y: %v. Command not run.", 0, 0))
-	}
-	offsetMapEnd, ok := fileOffsetMap[buildTileEndKey(maxX, maxY)]
-	if !ok {
-		log.Fatal(fmt.Sprintf("Error: No tile end key on x: %v, y: %v. Command not run.", maxX, maxY))
-	}
-	remainder := GetFileRemainingData(inputFile, offsetMapEnd)
-
-	if _, err := inputFile.WriteAt(allTileBytes, int64(offsetMapStart)); err != nil {
-		log.Fatal(err)
-	}
-
-	// shift remaining data to the right
-	if _, err := inputFile.WriteAt(remainder, int64(offsetMapStart+len(allTileBytes))); err != nil {
-		log.Fatal(err)
-	}
+	WriteAndShiftData(inputFilename, buildMapStartKey(), buildMapEndKey(), allTileBytes)
 }
 
-func ModifyPlayerColor(inputFilename string, playerId int, colorR int, colorG int, colorB int) {
-	offset, ok := fileOffsetMap[buildPlayerColorKey(playerId)]
-	if !ok {
-		log.Fatal(fmt.Sprintf("Error: No player color key on playerId: %v. Command not run.", playerId))
-	}
-
-	// write color
-	WriteUint8AtFileOffset(inputFilename, offset+0, colorB)
-	WriteUint8AtFileOffset(inputFilename, offset+1, colorG)
-	WriteUint8AtFileOffset(inputFilename, offset+2, colorR)
-	WriteUint8AtFileOffset(inputFilename, offset+3, 0)
+func WritePlayersToFile(inputFilename string, playersList []PlayerData) {
+	allPlayerBytes := ConvertAllPlayerDataToBytes(playersList)
+	WriteAndShiftData(inputFilename, buildAllPlayersStartKey(), buildAllPlayersEndKey(), allPlayerBytes)
 }
 
 func ModifyTileTerrain(inputFilename string, targetX int, targetY int, updatedValue int) {
@@ -456,12 +446,11 @@ func BuildEmptyTile(x int, y int) []byte {
 		ImprovementExists:  false,
 		ImprovementType:    -1,
 		HasCity:            false,
-		CityName:           "",
 		CityData:           nil,
 		ImprovementData:    nil,
 		Unit:               nil,
 		BufferUnitData:     []uint8{},
-		PlayerVisibility:   []uint8{},
+		PlayerVisibility:   []int{},
 		HasRoad:            false,
 		HasWaterRoute:      false,
 		Unknown:            []uint8{0, 0, 0, 0},
@@ -520,46 +509,24 @@ func BuildCity(cityName string) []byte {
 	improvement := 1
 	cityBytes = append(cityBytes, ConvertUint16Bytes(improvement)...)
 
-	cityLevel := 1
-	cityBytes = append(cityBytes, ConvertUint16Bytes(cityLevel)...)
-
-	foundedTurn := 0
-	cityBytes = append(cityBytes, ConvertUint16Bytes(foundedTurn)...)
-
-	currentPopulation := 0
-	cityBytes = append(cityBytes, ConvertUint16Bytes(currentPopulation)...)
-
-	totalPopulation := 0
-	cityBytes = append(cityBytes, ConvertUint16Bytes(totalPopulation)...)
-
-	// unknown
-	cityBytes = append(cityBytes, ConvertUint16Bytes(1)...)
-
-	baseScore := 0
-	cityBytes = append(cityBytes, ConvertUint16Bytes(baseScore)...)
-
-	// unknown
-	cityBytes = append(cityBytes, ConvertUint16Bytes(1)...)
-	// unknown
-	cityBytes = append(cityBytes, ConvertUint16Bytes(0)...)
-
-	// new city is not connected to capital
-	connectedPlayerCapital := 0
-	cityBytes = append(cityBytes, byte(connectedPlayerCapital))
-
-	hasCity := 1
-	cityBytes = append(cityBytes, byte(hasCity))
-
-	cityBytes = append(cityBytes, ConvertVarString(cityName)...)
-
-	foundedTribe := 0
-	cityBytes = append(cityBytes, byte(foundedTribe))
-
-	cityRewardsSize := 0
-	cityBytes = append(cityBytes, ConvertUint16Bytes(cityRewardsSize)...)
-
-	rebellionFlag := 0
-	cityBytes = append(cityBytes, ConvertUint16Bytes(rebellionFlag)...)
+	cityData := CityData{
+		CityLevel:              1,
+		FoundedTurn:            0,
+		CurrentPopulation:      0,
+		TotalPopulation:        0,
+		UnknownShort1:          1,
+		ParkBonus:              0,
+		UnknownShort2:          1,
+		UnknownShort3:          0,
+		ConnectedPlayerCapital: 0,
+		HasCityName:            1,
+		CityName:               cityName,
+		FoundedTribe:           0,
+		CityRewards:            []int{},
+		RebellionFlag:          0,
+		RebellionBuffer:        []byte{},
+	}
+	cityBytes = append(cityBytes, ConvertCityDataToBytes(cityData)...)
 
 	return cityBytes
 }
@@ -651,36 +618,14 @@ func ExpandRows(inputFilename string, newRowDimensions int) {
 			newRowDimensions, saveOutput.MapHeight))
 	}
 
-	inputFile, err := os.OpenFile(inputFilename, os.O_RDWR, 0644)
-	defer inputFile.Close()
-	if err != nil {
-		log.Fatal("Failed to load save state:", err)
-	}
-
-	offset, ok := fileOffsetMap[buildTileEndKey(saveOutput.MapWidth-1, saveOutput.MapHeight-1)]
-	if !ok {
-		log.Fatal(fmt.Sprintf("Error: can't find endpoint of tile x: %v, y: %v. Command not run.",
-			saveOutput.MapWidth-1, saveOutput.MapHeight-1))
-	}
-
-	remainder := GetFileRemainingData(inputFile, offset)
-	currentOffset := offset
 	allNewTileBytes := make([]byte, 0)
 	for y := saveOutput.MapHeight; y < newRowDimensions; y++ {
 		for x := 0; x < saveOutput.MapWidth; x++ {
-			tileBytes := BuildEmptyTile(x, y)
-			allNewTileBytes = append(allNewTileBytes, tileBytes...)
-			currentOffset += len(tileBytes)
+			allNewTileBytes = append(allNewTileBytes, BuildEmptyTile(x, y)...)
 		}
 	}
-	if _, err := inputFile.WriteAt(allNewTileBytes, int64(offset)); err != nil {
-		log.Fatal(err)
-	}
-	// shift remaining data to the right
-	if _, err := inputFile.WriteAt(remainder, int64(currentOffset)); err != nil {
-		log.Fatal(err)
-	}
 
+	WriteAndShiftData(inputFilename, buildMapEndKey(), buildMapEndKey(), allNewTileBytes)
 	ModifyMapDimensions(inputFilename, saveOutput.MapWidth, newRowDimensions)
 
 	finalSaveOutput, err := ReadPolytopiaDecompressedFile(inputFilename)
@@ -837,7 +782,7 @@ func RevealAllTiles(inputFilename string, newTribe int) {
 				}
 			}
 			if !isAlreadyVisible {
-				saveOutput.TileData[i][j].PlayerVisibility = append(saveOutput.TileData[i][j].PlayerVisibility, byte(newTribe))
+				saveOutput.TileData[i][j].PlayerVisibility = append(saveOutput.TileData[i][j].PlayerVisibility, newTribe)
 				fmt.Println(fmt.Sprintf("Revealed (%v, %v) for tribe %v", targetX, targetY, newTribe))
 			}
 		}
@@ -849,7 +794,7 @@ func RevealAllTiles(inputFilename string, newTribe int) {
 		}
 	}
 
-	WriteMapToFile(inputFilename, saveOutput.TileData, saveOutput.MapWidth-1, saveOutput.MapHeight-1)
+	WriteMapToFile(inputFilename, saveOutput.TileData)
 }
 
 func RevealTileForTribe(inputFilename string, targetX int, targetY int, newTribe int) {
@@ -938,7 +883,7 @@ func BuildEmptyPlayer(index int, playerName string, overrideColor color.RGBA) []
 		TotalUnitsKilled:     0,
 		TotalUnitsLost:       0,
 		TotalTribesDestroyed: 0,
-		OverrideColor:        []byte{overrideColor.B, overrideColor.G, overrideColor.A, 0},
+		OverrideColor:        []int{int(overrideColor.B), int(overrideColor.G), int(overrideColor.A), 0},
 		UnknownByte2:         0,
 		UniqueImprovements:   []int{},
 		DiplomacyArr:         []DiplomacyData{},
@@ -1062,7 +1007,7 @@ func AddPlayer(inputFilename string) {
 		log.Fatal("Failed to load save state:", err)
 	}
 
-	numPlayersKey := buildNumPlayersKey()
+	numPlayersKey := buildAllPlayersStartKey()
 	numPlayersOffset, ok := fileOffsetMap[numPlayersKey]
 	if !ok {
 		log.Fatal(fmt.Sprintf("Error: No player start key: %v. Command not run.", numPlayersKey))
@@ -1091,4 +1036,67 @@ func AddPlayer(inputFilename string) {
 	}
 
 	ModifyAllExistingPlayerUnknownArr(inputFilename)
+}
+
+func SwapPlayers(inputFilename string, playerId1 int, playerId2 int) {
+	saveOutput, err := ReadPolytopiaDecompressedFile(inputFilename)
+	if err != nil {
+		log.Fatal("Failed to read save file")
+	}
+
+	 // assumes 254 is not used by any players
+	unusedPlayerId := 254
+
+	// Need to reassign so we don't merge the players
+	for i := 0; i < saveOutput.MapHeight; i++ {
+		for j := 0; j < saveOutput.MapWidth; j++ {
+			if saveOutput.TileData[i][j].Owner == playerId1 {
+				saveOutput.TileData[i][j].Owner = unusedPlayerId
+			}
+
+			if saveOutput.TileData[i][j].Unit != nil && saveOutput.TileData[i][j].Unit.Owner == uint8(playerId1) {
+				saveOutput.TileData[i][j].Unit.Owner = uint8(unusedPlayerId)
+			}
+
+			if saveOutput.TileData[i][j].PreviousUnit != nil && saveOutput.TileData[i][j].PreviousUnit.Owner == uint8(playerId1) {
+				saveOutput.TileData[i][j].PreviousUnit.Owner = uint8(unusedPlayerId)
+			}
+		}
+	}
+
+	// Overwrite all playerId2 tiles and units with playerId1
+	for i := 0; i < saveOutput.MapHeight; i++ {
+		for j := 0; j < saveOutput.MapWidth; j++ {
+			if saveOutput.TileData[i][j].Owner == playerId2 {
+				saveOutput.TileData[i][j].Owner = playerId1
+			}
+
+			if saveOutput.TileData[i][j].Unit != nil && saveOutput.TileData[i][j].Unit.Owner == uint8(playerId2) {
+				saveOutput.TileData[i][j].Unit.Owner = uint8(playerId1)
+			}
+
+			if saveOutput.TileData[i][j].PreviousUnit != nil && saveOutput.TileData[i][j].PreviousUnit.Owner == uint8(playerId2) {
+				saveOutput.TileData[i][j].PreviousUnit.Owner = uint8(playerId1)
+			}
+		}
+	}
+
+	// Overwrite old playerId tiles and units with playerId2
+	for i := 0; i < saveOutput.MapHeight; i++ {
+		for j := 0; j < saveOutput.MapWidth; j++ {
+			if saveOutput.TileData[i][j].Owner == unusedPlayerId {
+				saveOutput.TileData[i][j].Owner = playerId2
+			}
+
+			if saveOutput.TileData[i][j].Unit != nil && saveOutput.TileData[i][j].Unit.Owner == uint8(unusedPlayerId) {
+				saveOutput.TileData[i][j].Unit.Owner = uint8(playerId2)
+			}
+
+			if saveOutput.TileData[i][j].PreviousUnit != nil && saveOutput.TileData[i][j].PreviousUnit.Owner == uint8(unusedPlayerId) {
+				saveOutput.TileData[i][j].PreviousUnit.Owner = uint8(playerId2)
+			}
+		}
+	}
+
+	WriteMapToFile(inputFilename, saveOutput.TileData)
 }

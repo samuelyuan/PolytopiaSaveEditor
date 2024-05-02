@@ -22,6 +22,7 @@ func main() {
 	cityNamePtr := flag.String("cityname", "", "City name")
 	oldValuePtr := flag.String("oldvalue", "", "Old value")
 	newValuePtr := flag.String("value", "", "New value")
+	playerIdPtr := flag.String("playerid", "", "Player Id")
 
 	flag.Parse()
 
@@ -168,7 +169,7 @@ func main() {
 				playerData.Id, playerData.Name, playerData.Tribe, playerData.OverrideColor)
 		}
 	} else if mode == "modify-player-color" {
-		playerId, err := strconv.Atoi(*newValuePtr)
+		playerId, err := strconv.Atoi(*playerIdPtr)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -176,8 +177,50 @@ func main() {
 		colorG := *gPtr
 		colorB := *bPtr
 
-		fileio.ModifyPlayerColor(inputFilename, playerId, colorR, colorG, colorB)
+		for i := 0; i < len(saveOutput.PlayerData); i++ {
+			if saveOutput.PlayerData[i].Id == playerId {
+				saveOutput.PlayerData[i].OverrideColor = []int{int(colorB), int(colorG), int(colorR), 0}
+				break
+			}
+		}
+
+		fileio.WritePlayersToFile(inputFilename, saveOutput.PlayerData)
 		fmt.Println(fmt.Sprintf("Set player %v color to RGB(%v, %v, %v)", playerId, colorR, colorG, colorB))
+	} else if mode == "modify-player-tribe" {
+		playerId, err := strconv.Atoi(*playerIdPtr)
+		if err != nil {
+			log.Fatal(err)
+		}
+		newTribe, err := strconv.Atoi(*newValuePtr)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		for i := 0; i < len(saveOutput.PlayerData); i++ {
+			if saveOutput.PlayerData[i].Id == playerId {
+				saveOutput.PlayerData[i].Tribe = newTribe
+				break
+			}
+		}
+
+		fileio.WritePlayersToFile(inputFilename, saveOutput.PlayerData)
+		fmt.Println(fmt.Sprintf("Set player %v tribe to %v", playerId, newTribe))
+	} else if mode == "modify-player-name" {
+		playerId, err := strconv.Atoi(*playerIdPtr)
+		if err != nil {
+			log.Fatal(err)
+		}
+		newName := *newValuePtr
+
+		for i := 0; i < len(saveOutput.PlayerData); i++ {
+			if saveOutput.PlayerData[i].Id == playerId {
+				saveOutput.PlayerData[i].Name = newName
+				break
+			}
+		}
+
+		fileio.WritePlayersToFile(inputFilename, saveOutput.PlayerData)
+		fmt.Println(fmt.Sprintf("Set player %v newName to %v", playerId, newName))
 	} else if mode == "convert-tribe" {
 		oldValue, err := strconv.Atoi(*oldValuePtr)
 		if err != nil {
@@ -203,17 +246,19 @@ func main() {
 			log.Fatal(err)
 		}
 
+		totalConverted := 0
 		for tribe, tribeUnits := range saveOutput.TribeUnitMap {
 			if tribe == updatedValue {
 				continue
 			}
 
 			fmt.Println(fmt.Sprintf("Converting all units from tribe %v to tribe %v. Total of %v units converted.", tribe, updatedValue, len(tribeUnits)))
+			totalConverted += len(tribeUnits)
 			for i := 0; i < len(tribeUnits); i++ {
 				fileio.ModifyUnitTribe(inputFilename, tribeUnits[i].X, tribeUnits[i].Y, updatedValue)
 			}
 		}
-		fmt.Println(fmt.Sprintf("Changed all units to be under tribe %v", updatedValue))
+		fmt.Println(fmt.Sprintf("Changed all units to be under tribe %v. Converted total of %v units.", updatedValue, totalConverted))
 	} else if mode == "reveal-all-tiles" {
 		newTribe, err := strconv.Atoi(*newValuePtr)
 		if err != nil {
@@ -242,20 +287,46 @@ func main() {
 		}
 
 		fileio.ExpandTiles(inputFilename, newSquareSizeDimensions)
-	} else if mode == "reset-game" {
-		currentMapHeight := len(saveOutput.TileData)
-		currentMapWidth := len(saveOutput.TileData[0])
+	} else if mode == "swap-players" {
+		oldValue, err := strconv.Atoi(*oldValuePtr)
+		if err != nil {
+			log.Fatal(err)
+		}
+		updatedValue, err := strconv.Atoi(*newValuePtr)
+		if err != nil {
+			log.Fatal(err)
+		}
 
+		fmt.Println(fmt.Sprintf("Swap player id %v with id %v", oldValue, updatedValue))
+		fileio.SwapPlayers(inputFilename, oldValue, updatedValue)
+		fmt.Println(fmt.Sprintf("Swapped players %v and %v", oldValue, updatedValue))
+	} else if mode == "reset-game" {
 		initialMapHeight := len(saveOutput.InitialTileData)
 		initialMapWidth := len(saveOutput.InitialTileData[0])
-		fileio.WriteMapToFile(inputFilename, saveOutput.InitialTileData, currentMapWidth-1, currentMapHeight-1)
+		fileio.WriteMapToFile(inputFilename, saveOutput.InitialTileData)
+		for i := 0; i < len(saveOutput.InitialPlayerData); i++ {
+			saveOutput.InitialPlayerData[i].AvailableTech = []int{0}
+		}
+		fileio.WritePlayersToFile(inputFilename, saveOutput.InitialPlayerData)
 		fileio.ModifyMapDimensions(inputFilename, initialMapWidth, initialMapHeight)
-	} else if mode == "copy-map" {
-		// tests byte conversion of map data
+	} else if mode == "copy-data" {
+		// tests byte conversion of map data and player data
 		// make sure new data is equal to old data
-		mapHeight := len(saveOutput.TileData)
-		mapWidth := len(saveOutput.TileData[0])
-		fileio.WriteMapToFile(inputFilename, saveOutput.TileData, mapWidth-1, mapHeight-1)
+		fileio.WriteMapToFile(inputFilename, saveOutput.TileData)
+		fileio.WritePlayersToFile(inputFilename, saveOutput.PlayerData)
+	} else if mode == "import-json" {
+		// parameters: -value=importJsonFilename
+		importJsonFilename := *newValuePtr
+		fmt.Println(fmt.Sprintf("Importing data from %v", importJsonFilename))
+		polytopiaJson := fileio.ImportPolytopiaDataFromJson(importJsonFilename)
+		fileio.WriteMapToFile(inputFilename, polytopiaJson.TileData)
+		fileio.WritePlayersToFile(inputFilename, polytopiaJson.PlayerData)
+		fmt.Println(fmt.Sprintf("Updated file %v with imported json", inputFilename))
+	} else if mode == "export-json" {
+		// parameters: -value=exportFilename
+		exportJsonFilename := *newValuePtr
+		fileio.ExportPolytopiaJsonFile(saveOutput, exportJsonFilename)
+		fmt.Println(fmt.Sprintf("Exported json from save state %v to %v", inputFilename, exportJsonFilename))
 	} else {
 		log.Fatal("Invalid mode:", mode)
 	}
