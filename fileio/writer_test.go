@@ -6,26 +6,15 @@ import (
 	"testing"
 )
 
-func TestBuildTile(t *testing.T) {
-	resultBytes := BuildEmptyTile(12, 34)
-
-	expectedBytes := []byte{12, 0, 0, 0, 34, 0, 0, 0,
-		3, 0, 1, 0, 1, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255,
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-	if !reflect.DeepEqual(resultBytes, expectedBytes) {
-		t.Fatalf(`result = %v, expected = %v`, resultBytes, expectedBytes)
-	}
-}
-
 func TestConvertCityDataToBytes(t *testing.T) {
-	cityData := CityData{
-		CityLevel:              3,
+	cityData := ImprovementData{
+		Level:                  3,
 		CurrentPopulation:      1,
 		TotalPopulation:        6,
-		UnknownShort1:          1,
-		ParkBonus:              0,
-		UnknownShort2:          1,
-		UnknownShort3:          -2,
+		Production:             1,
+		BaseScore:              0,
+		BorderSize:             1,
+		UpgradeCount:           -2,
 		ConnectedPlayerCapital: 1,
 		HasCityName:            1,
 		CityName:               "Test",
@@ -34,7 +23,7 @@ func TestConvertCityDataToBytes(t *testing.T) {
 		RebellionFlag:          0,
 		RebellionBuffer:        []byte{},
 	}
-	resultBytes := ConvertCityDataToBytes(cityData)
+	resultBytes := ConvertImprovementDataToBytes(cityData)
 	expectedBytes := []byte{3, 0, 0, 0, 1, 0, 6, 0, 1, 0, 0, 0, 1, 0, 254, 255, 1, 1, 4, 84, 101, 115, 116, 0, 2, 0, 4, 0, 7, 0, 0, 0}
 	if !reflect.DeepEqual(resultBytes, expectedBytes) {
 		t.Fatalf(`result = %v, expected = %v`, resultBytes, expectedBytes)
@@ -47,14 +36,16 @@ func TestConvertImprovementDataToBytes(t *testing.T) {
 		FoundedTurn:            0,
 		CurrentPopulation:      0,
 		TotalPopulation:        0,
-		UnknownShort1:          1,
+		Production:             1,
 		BaseScore:              0,
-		Unknown2:               [2]uint16{0, 0},
+		BorderSize:             0,
+		UpgradeCount:           0,
 		ConnectedPlayerCapital: 0,
 		HasCityName:            0,
 		FoundedTribe:           0,
-		RewardsSize:            0,
+		CityRewards:            []int{},
 		RebellionFlag:          0,
+		RebellionBuffer:        []byte{},
 	}
 	resultBytes := ConvertImprovementDataToBytes(improvementData)
 	expectedBytes := []byte{1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
@@ -99,15 +90,13 @@ func TestConvertEmptyTileDataToBytes(t *testing.T) {
 		ResourceType:       -1,
 		ImprovementExists:  false,
 		ImprovementType:    -1,
-		HasCity:            false,
-		CityData:           nil,
 		ImprovementData:    nil,
 		Unit:               nil,
-		BufferUnitData:     []uint8{},
+		BufferUnitData:     []int{},
 		PlayerVisibility:   []int{},
 		HasRoad:            false,
 		HasWaterRoute:      false,
-		Unknown:            []uint8{0, 0, 0, 0},
+		Unknown:            []int{0, 0, 0, 0},
 	}
 	resultBytes := ConvertTileToBytes(tileData)
 	expectedBytes := []byte{3, 0, 0, 0, 1, 0, 0, 0, 3, 0, 8, 0, 1, 0, 0, 0,
@@ -137,28 +126,28 @@ func TestConvertTileDataToBytes(t *testing.T) {
 		ResourceType:       -1,
 		ImprovementExists:  true,
 		ImprovementType:    1,
-		HasCity:            true,
-		CityData:           nil,
 		ImprovementData: &ImprovementData{
 			Level:                  1,
 			FoundedTurn:            0,
 			CurrentPopulation:      0,
 			TotalPopulation:        0,
-			UnknownShort1:          1,
+			Production:             1,
 			BaseScore:              0,
-			Unknown2:               [2]uint16{1, 0},
+			BorderSize:             1,
+			UpgradeCount:           0,
 			ConnectedPlayerCapital: 0,
 			HasCityName:            0,
 			FoundedTribe:           0,
-			RewardsSize:            0,
+			CityRewards:            []int{},
 			RebellionFlag:          0,
+			RebellionBuffer:        []byte{},
 		},
 		Unit:             nil,
-		BufferUnitData:   []uint8{},
+		BufferUnitData:   []int{},
 		PlayerVisibility: []int{},
 		HasRoad:          false,
 		HasWaterRoute:    false,
-		Unknown:          []uint8{0, 0, 0, 0},
+		Unknown:          []int{0, 0, 0, 0},
 	}
 
 	resultBytes := ConvertTileToBytes(tileData)
@@ -231,7 +220,7 @@ func TestConvertPlayerDataToBytes(t *testing.T) {
 		DiplomacyMessages: []DiplomacyMessage{},
 		DestroyedByTribe:  0,
 		DestroyedTurn:     0,
-		UnknownBuffer2:    []byte{255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 255, 255, 255, 255},
+		UnknownBuffer2:    []int{255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 255, 255, 255, 255},
 	}
 	resultBytes := ConvertPlayerDataToBytes(playerData)
 	expectedBytes := []byte{1,
@@ -275,35 +264,13 @@ func TestConvertPlayerDataToBytes(t *testing.T) {
 	}
 }
 
-func TestBuildTileHeaderTribeCity(t *testing.T) {
-	targetX := 12
-	targetY := 34
-	tribe := 1
-	resultBytes := BuildTileHeaderTribeCity(targetX, targetY, tribe)
-
-	expectedBytes := []byte{1, 0, 12, 0, 0, 0, 34, 0, 0, 0}
-	if !reflect.DeepEqual(resultBytes, expectedBytes) {
-		t.Fatalf(`result = %v, expected = %v`, resultBytes, expectedBytes)
-	}
-}
-
-func TestBuildCity(t *testing.T) {
-	cityName := "Test"
-	cityBytes := BuildCity(cityName)
-
-	expectedBytes := []byte{1, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 4, 84, 101, 115, 116, 0, 0, 0, 0, 0}
-	if !reflect.DeepEqual(cityBytes, expectedBytes) {
-		t.Fatalf(`result = %v, expected = %v`, cityBytes, expectedBytes)
-	}
-}
-
 func TestBuildNewPlayerUnknownArr(t *testing.T) {
 	oldArr := []int{1, 0, 0, 0, 0, 2, 80, 69, 0, 0, 3, 88, 29, 1, 0, 4, 39, 95, 0, 0, 5, 222, 34, 1, 0,
 		6, 218, 77, 1, 0, 7, 134, 250, 0, 0, 8, 243, 153, 0, 0, 9, 131, 143, 0, 0, 10, 180, 147, 0, 0,
 		11, 74, 89, 0, 0, 12, 7, 125, 0, 0, 13, 74, 69, 0, 0, 14, 66, 163, 0, 0, 15, 165, 216, 0, 0,
 		16, 41, 125, 0, 0, 255, 0, 0, 0, 0}
 	resultBytesNoChange := BuildNewPlayerUnknownArr(oldArr, 16)
-	expectedBytesNoChange := []byte{1, 0, 0, 0, 0, 2, 80, 69, 0, 0, 3, 88, 29, 1, 0, 4, 39, 95, 0, 0, 5, 222, 34, 1, 0,
+	expectedBytesNoChange := []int{1, 0, 0, 0, 0, 2, 80, 69, 0, 0, 3, 88, 29, 1, 0, 4, 39, 95, 0, 0, 5, 222, 34, 1, 0,
 		6, 218, 77, 1, 0, 7, 134, 250, 0, 0, 8, 243, 153, 0, 0, 9, 131, 143, 0, 0, 10, 180, 147, 0, 0,
 		11, 74, 89, 0, 0, 12, 7, 125, 0, 0, 13, 74, 69, 0, 0, 14, 66, 163, 0, 0, 15, 165, 216, 0, 0,
 		16, 41, 125, 0, 0, 255, 0, 0, 0, 0}
@@ -312,7 +279,7 @@ func TestBuildNewPlayerUnknownArr(t *testing.T) {
 	}
 
 	resultBytesWithChange := BuildNewPlayerUnknownArr(oldArr, 17)
-	expectedBytesWithChange := []byte{1, 0, 0, 0, 0, 2, 80, 69, 0, 0, 3, 88, 29, 1, 0, 4, 39, 95, 0, 0, 5, 222, 34, 1, 0,
+	expectedBytesWithChange := []int{1, 0, 0, 0, 0, 2, 80, 69, 0, 0, 3, 88, 29, 1, 0, 4, 39, 95, 0, 0, 5, 222, 34, 1, 0,
 		6, 218, 77, 1, 0, 7, 134, 250, 0, 0, 8, 243, 153, 0, 0, 9, 131, 143, 0, 0, 10, 180, 147, 0, 0,
 		11, 74, 89, 0, 0, 12, 7, 125, 0, 0, 13, 74, 69, 0, 0, 14, 66, 163, 0, 0, 15, 165, 216, 0, 0,
 		16, 41, 125, 0, 0, 17, 0, 0, 0, 0, 255, 0, 0, 0, 0}
@@ -322,7 +289,7 @@ func TestBuildNewPlayerUnknownArr(t *testing.T) {
 }
 
 func TestBuildPlayer(t *testing.T) {
-	resultBytes := BuildEmptyPlayer(17, "Player17", color.RGBA{100, 150, 200, 255})
+	resultBytes := ConvertPlayerDataToBytes(BuildEmptyPlayer(17, "Player17", color.RGBA{100, 150, 200, 255}))
 	expectedBytes := []byte{17,
 		// Player name
 		8, 80, 108, 97, 121, 101, 114, 49, 55,

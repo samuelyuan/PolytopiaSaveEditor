@@ -57,8 +57,7 @@ func main() {
 		if mode == "modify-unit-tribe" {
 			fileio.ModifyUnitTribe(inputFilename, targetX, targetY, updatedValue)
 		} else if mode == "modify-unit-type" {
-			offset := fileio.GetUnitLocationFileOffset(targetX, targetY)
-			fileio.WriteUint16AtFileOffset(inputFilename, offset+5, updatedValue)
+			fileio.ModifyUnitType(inputFilename, targetX, targetY, updatedValue)
 		}
 		fmt.Println(fmt.Sprintf("Target is at (%v, %v), command: %v, updated value: %v", targetX, targetY, mode, updatedValue))
 	} else if mode == "reveal-tile" {
