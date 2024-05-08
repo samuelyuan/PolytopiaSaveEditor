@@ -70,21 +70,16 @@ func main() {
 
 		fileio.RevealTileForTribe(inputFilename, targetX, targetY, updatedValue)
 		fmt.Println(fmt.Sprintf("Revealed (%v, %v) for tribe %v", targetX, targetY, updatedValue))
-	} else if mode == "modify-tile-capital" {
+	} else if mode == "set-new-tile-capital" {
 		targetX := *xPtr
 		targetY := *yPtr
-		updatedValue, err := strconv.Atoi(*newValuePtr)
+		updatedTribe, err := strconv.Atoi(*newValuePtr)
 		if err != nil {
 			log.Fatal(err)
 		}
+		newCityName := *cityNamePtr
 
-		if updatedValue >= 255 {
-			log.Fatal("Value must be less than 255")
-		}
-		updatedTile := saveOutput.TileData[targetY][targetX]
-		updatedTile.Capital = updatedValue
-		fileio.WriteTileToFile(inputFilename, updatedTile, targetX, targetY)
-		fmt.Println(fmt.Sprintf("Modified tile (%v, %v) to have capital %v", targetX, targetY, updatedValue))
+		fileio.SetTileCapital(inputFilename, targetX, targetY, newCityName, updatedTribe)
 	} else if mode == "modify-tile-terrain" {
 		targetX := *xPtr
 		targetY := *yPtr

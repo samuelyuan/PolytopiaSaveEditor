@@ -21,7 +21,7 @@ func TestConvertCityDataToBytes(t *testing.T) {
 		FoundedTribe:           0,
 		CityRewards:            []int{4, 7},
 		RebellionFlag:          0,
-		RebellionBuffer:        []byte{},
+		RebellionBuffer:        []int{},
 	}
 	resultBytes := ConvertImprovementDataToBytes(cityData)
 	expectedBytes := []byte{3, 0, 0, 0, 1, 0, 6, 0, 1, 0, 0, 0, 1, 0, 254, 255, 1, 1, 4, 84, 101, 115, 116, 0, 2, 0, 4, 0, 7, 0, 0, 0}
@@ -45,7 +45,7 @@ func TestConvertImprovementDataToBytes(t *testing.T) {
 		FoundedTribe:           0,
 		CityRewards:            []int{},
 		RebellionFlag:          0,
-		RebellionBuffer:        []byte{},
+		RebellionBuffer:        []int{},
 	}
 	resultBytes := ConvertImprovementDataToBytes(improvementData)
 	expectedBytes := []byte{1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
@@ -140,7 +140,7 @@ func TestConvertTileDataToBytes(t *testing.T) {
 			FoundedTribe:           0,
 			CityRewards:            []int{},
 			RebellionFlag:          0,
-			RebellionBuffer:        []byte{},
+			RebellionBuffer:        []int{},
 		},
 		Unit:             nil,
 		BufferUnitData:   []int{},
@@ -175,10 +175,25 @@ func TestConvertPlayerDataToBytes(t *testing.T) {
 		Tribe:                15,
 		UnknownByte1:         1,
 		UnknownInt1:          1,
-		UnknownArr1: []int{1, 0, 0, 0, 0, 2, 80, 69, 0, 0, 3, 88, 29, 1, 0, 4, 39, 95, 0, 0, 5, 222, 34, 1, 0,
-			6, 218, 77, 1, 0, 7, 134, 250, 0, 0, 8, 243, 153, 0, 0, 9, 131, 143, 0, 0, 10, 180, 147, 0, 0,
-			11, 74, 89, 0, 0, 12, 7, 125, 0, 0, 13, 74, 69, 0, 0, 14, 66, 163, 0, 0, 15, 165, 216, 0, 0,
-			16, 41, 125, 0, 0, 255, 0, 0, 0, 0},
+		UnknownArr1: []PlayerUnknownData{
+			{PlayerId: 1, Unknown1: 0, Unknown2: 0, Unknown3: 0, Unknown4: 0},
+			{PlayerId: 2, Unknown1: 80, Unknown2: 69, Unknown3: 0, Unknown4: 0},
+			{PlayerId: 3, Unknown1: 88, Unknown2: 29, Unknown3: 1, Unknown4: 0},
+			{PlayerId: 4, Unknown1: 39, Unknown2: 95, Unknown3: 0, Unknown4: 0},
+			{PlayerId: 5, Unknown1: 222, Unknown2: 34, Unknown3: 1, Unknown4: 0},
+			{PlayerId: 6, Unknown1: 218, Unknown2: 77, Unknown3: 1, Unknown4: 0},
+			{PlayerId: 7, Unknown1: 134, Unknown2: 250, Unknown3: 0, Unknown4: 0},
+			{PlayerId: 8, Unknown1: 243, Unknown2: 153, Unknown3: 0, Unknown4: 0},
+			{PlayerId: 9, Unknown1: 131, Unknown2: 143, Unknown3: 0, Unknown4: 0},
+			{PlayerId: 10, Unknown1: 180, Unknown2: 147, Unknown3: 0, Unknown4: 0},
+			{PlayerId: 11, Unknown1: 74, Unknown2: 89, Unknown3: 0, Unknown4: 0},
+			{PlayerId: 12, Unknown1: 7, Unknown2: 125, Unknown3: 0, Unknown4: 0},
+			{PlayerId: 13, Unknown1: 74, Unknown2: 69, Unknown3: 0, Unknown4: 0},
+			{PlayerId: 14, Unknown1: 66, Unknown2: 163, Unknown3: 0, Unknown4: 0},
+			{PlayerId: 15, Unknown1: 165, Unknown2: 216, Unknown3: 0, Unknown4: 0},
+			{PlayerId: 16, Unknown1: 41, Unknown2: 125, Unknown3: 0, Unknown4: 0},
+			{PlayerId: 255, Unknown1: 0, Unknown2: 0, Unknown3: 0, Unknown4: 0},
+		},
 		Currency:           900,
 		Score:              10000,
 		UnknownInt2:        0,
@@ -186,10 +201,10 @@ func TestConvertPlayerDataToBytes(t *testing.T) {
 		AvailableTech:      []int{0, 8, 15, 10, 39, 18, 13, 1, 4, 14, 20},
 		EncounteredPlayers: []int{7, 11, 3, 5, 10},
 		Tasks: []PlayerTaskData{
-			{Type: 6, Buffer: []byte{1, 1}},
-			{Type: 5, Buffer: []byte{1, 1, 10, 0, 0, 0}},
-			{Type: 8, Buffer: []byte{1, 0}},
-			{Type: 3, Buffer: []byte{1, 1}},
+			{Type: 6, Buffer: []int{1, 1}},
+			{Type: 5, Buffer: []int{1, 1, 10, 0, 0, 0}},
+			{Type: 8, Buffer: []int{1, 0}},
+			{Type: 3, Buffer: []int{1, 1}},
 		},
 		TotalUnitsKilled:     28,
 		TotalUnitsLost:       32,
@@ -265,24 +280,70 @@ func TestConvertPlayerDataToBytes(t *testing.T) {
 }
 
 func TestBuildNewPlayerUnknownArr(t *testing.T) {
-	oldArr := []int{1, 0, 0, 0, 0, 2, 80, 69, 0, 0, 3, 88, 29, 1, 0, 4, 39, 95, 0, 0, 5, 222, 34, 1, 0,
-		6, 218, 77, 1, 0, 7, 134, 250, 0, 0, 8, 243, 153, 0, 0, 9, 131, 143, 0, 0, 10, 180, 147, 0, 0,
-		11, 74, 89, 0, 0, 12, 7, 125, 0, 0, 13, 74, 69, 0, 0, 14, 66, 163, 0, 0, 15, 165, 216, 0, 0,
-		16, 41, 125, 0, 0, 255, 0, 0, 0, 0}
+	oldArr := []PlayerUnknownData{
+		{PlayerId: 1, Unknown1: 0, Unknown2: 0, Unknown3: 0, Unknown4: 0},
+		{PlayerId: 2, Unknown1: 80, Unknown2: 69, Unknown3: 0, Unknown4: 0},
+		{PlayerId: 3, Unknown1: 88, Unknown2: 29, Unknown3: 1, Unknown4: 0},
+		{PlayerId: 4, Unknown1: 39, Unknown2: 95, Unknown3: 0, Unknown4: 0},
+		{PlayerId: 5, Unknown1: 222, Unknown2: 34, Unknown3: 1, Unknown4: 0},
+		{PlayerId: 6, Unknown1: 218, Unknown2: 77, Unknown3: 1, Unknown4: 0},
+		{PlayerId: 7, Unknown1: 134, Unknown2: 250, Unknown3: 0, Unknown4: 0},
+		{PlayerId: 8, Unknown1: 243, Unknown2: 153, Unknown3: 0, Unknown4: 0},
+		{PlayerId: 9, Unknown1: 131, Unknown2: 143, Unknown3: 0, Unknown4: 0},
+		{PlayerId: 10, Unknown1: 180, Unknown2: 147, Unknown3: 0, Unknown4: 0},
+		{PlayerId: 11, Unknown1: 74, Unknown2: 89, Unknown3: 0, Unknown4: 0},
+		{PlayerId: 12, Unknown1: 7, Unknown2: 125, Unknown3: 0, Unknown4: 0},
+		{PlayerId: 13, Unknown1: 74, Unknown2: 69, Unknown3: 0, Unknown4: 0},
+		{PlayerId: 14, Unknown1: 66, Unknown2: 163, Unknown3: 0, Unknown4: 0},
+		{PlayerId: 15, Unknown1: 165, Unknown2: 216, Unknown3: 0, Unknown4: 0},
+		{PlayerId: 16, Unknown1: 41, Unknown2: 125, Unknown3: 0, Unknown4: 0},
+		{PlayerId: 255, Unknown1: 0, Unknown2: 0, Unknown3: 0, Unknown4: 0},
+	}
 	resultBytesNoChange := BuildNewPlayerUnknownArr(oldArr, 16)
-	expectedBytesNoChange := []int{1, 0, 0, 0, 0, 2, 80, 69, 0, 0, 3, 88, 29, 1, 0, 4, 39, 95, 0, 0, 5, 222, 34, 1, 0,
-		6, 218, 77, 1, 0, 7, 134, 250, 0, 0, 8, 243, 153, 0, 0, 9, 131, 143, 0, 0, 10, 180, 147, 0, 0,
-		11, 74, 89, 0, 0, 12, 7, 125, 0, 0, 13, 74, 69, 0, 0, 14, 66, 163, 0, 0, 15, 165, 216, 0, 0,
-		16, 41, 125, 0, 0, 255, 0, 0, 0, 0}
+	expectedBytesNoChange := []PlayerUnknownData{
+		{PlayerId: 1, Unknown1: 0, Unknown2: 0, Unknown3: 0, Unknown4: 0},
+		{PlayerId: 2, Unknown1: 80, Unknown2: 69, Unknown3: 0, Unknown4: 0},
+		{PlayerId: 3, Unknown1: 88, Unknown2: 29, Unknown3: 1, Unknown4: 0},
+		{PlayerId: 4, Unknown1: 39, Unknown2: 95, Unknown3: 0, Unknown4: 0},
+		{PlayerId: 5, Unknown1: 222, Unknown2: 34, Unknown3: 1, Unknown4: 0},
+		{PlayerId: 6, Unknown1: 218, Unknown2: 77, Unknown3: 1, Unknown4: 0},
+		{PlayerId: 7, Unknown1: 134, Unknown2: 250, Unknown3: 0, Unknown4: 0},
+		{PlayerId: 8, Unknown1: 243, Unknown2: 153, Unknown3: 0, Unknown4: 0},
+		{PlayerId: 9, Unknown1: 131, Unknown2: 143, Unknown3: 0, Unknown4: 0},
+		{PlayerId: 10, Unknown1: 180, Unknown2: 147, Unknown3: 0, Unknown4: 0},
+		{PlayerId: 11, Unknown1: 74, Unknown2: 89, Unknown3: 0, Unknown4: 0},
+		{PlayerId: 12, Unknown1: 7, Unknown2: 125, Unknown3: 0, Unknown4: 0},
+		{PlayerId: 13, Unknown1: 74, Unknown2: 69, Unknown3: 0, Unknown4: 0},
+		{PlayerId: 14, Unknown1: 66, Unknown2: 163, Unknown3: 0, Unknown4: 0},
+		{PlayerId: 15, Unknown1: 165, Unknown2: 216, Unknown3: 0, Unknown4: 0},
+		{PlayerId: 16, Unknown1: 41, Unknown2: 125, Unknown3: 0, Unknown4: 0},
+		{PlayerId: 255, Unknown1: 0, Unknown2: 0, Unknown3: 0, Unknown4: 0},
+	}
 	if !reflect.DeepEqual(resultBytesNoChange, expectedBytesNoChange) {
 		t.Fatalf(`No change failed. Result = %v, expected = %v`, resultBytesNoChange, expectedBytesNoChange)
 	}
 
 	resultBytesWithChange := BuildNewPlayerUnknownArr(oldArr, 17)
-	expectedBytesWithChange := []int{1, 0, 0, 0, 0, 2, 80, 69, 0, 0, 3, 88, 29, 1, 0, 4, 39, 95, 0, 0, 5, 222, 34, 1, 0,
-		6, 218, 77, 1, 0, 7, 134, 250, 0, 0, 8, 243, 153, 0, 0, 9, 131, 143, 0, 0, 10, 180, 147, 0, 0,
-		11, 74, 89, 0, 0, 12, 7, 125, 0, 0, 13, 74, 69, 0, 0, 14, 66, 163, 0, 0, 15, 165, 216, 0, 0,
-		16, 41, 125, 0, 0, 17, 0, 0, 0, 0, 255, 0, 0, 0, 0}
+	expectedBytesWithChange := []PlayerUnknownData{
+		{PlayerId: 1, Unknown1: 0, Unknown2: 0, Unknown3: 0, Unknown4: 0},
+		{PlayerId: 2, Unknown1: 80, Unknown2: 69, Unknown3: 0, Unknown4: 0},
+		{PlayerId: 3, Unknown1: 88, Unknown2: 29, Unknown3: 1, Unknown4: 0},
+		{PlayerId: 4, Unknown1: 39, Unknown2: 95, Unknown3: 0, Unknown4: 0},
+		{PlayerId: 5, Unknown1: 222, Unknown2: 34, Unknown3: 1, Unknown4: 0},
+		{PlayerId: 6, Unknown1: 218, Unknown2: 77, Unknown3: 1, Unknown4: 0},
+		{PlayerId: 7, Unknown1: 134, Unknown2: 250, Unknown3: 0, Unknown4: 0},
+		{PlayerId: 8, Unknown1: 243, Unknown2: 153, Unknown3: 0, Unknown4: 0},
+		{PlayerId: 9, Unknown1: 131, Unknown2: 143, Unknown3: 0, Unknown4: 0},
+		{PlayerId: 10, Unknown1: 180, Unknown2: 147, Unknown3: 0, Unknown4: 0},
+		{PlayerId: 11, Unknown1: 74, Unknown2: 89, Unknown3: 0, Unknown4: 0},
+		{PlayerId: 12, Unknown1: 7, Unknown2: 125, Unknown3: 0, Unknown4: 0},
+		{PlayerId: 13, Unknown1: 74, Unknown2: 69, Unknown3: 0, Unknown4: 0},
+		{PlayerId: 14, Unknown1: 66, Unknown2: 163, Unknown3: 0, Unknown4: 0},
+		{PlayerId: 15, Unknown1: 165, Unknown2: 216, Unknown3: 0, Unknown4: 0},
+		{PlayerId: 16, Unknown1: 41, Unknown2: 125, Unknown3: 0, Unknown4: 0},
+		{PlayerId: 17, Unknown1: 0, Unknown2: 0, Unknown3: 0, Unknown4: 0}, // new line for player id 17
+		{PlayerId: 255, Unknown1: 0, Unknown2: 0, Unknown3: 0, Unknown4: 0},
+	}
 	if !reflect.DeepEqual(resultBytesWithChange, expectedBytesWithChange) {
 		t.Fatalf(`Change to include player 17 failed. Result = %v, expected = %v`, resultBytesWithChange, expectedBytesWithChange)
 	}

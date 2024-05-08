@@ -8,10 +8,11 @@ import (
 )
 
 type PolytopiaSaveJson struct {
-	GameName   string
-	FileFormat string
-	TileData   [][]TileData
-	PlayerData []PlayerData
+	GameName        string
+	FileFormat      string
+	TileData        [][]TileData
+	PlayerData      []PlayerData
+	MapHeaderOutput MapHeaderOutput
 }
 
 func ImportPolytopiaDataFromJson(inputFilename string) *PolytopiaSaveJson {
@@ -38,10 +39,11 @@ func ImportPolytopiaDataFromJson(inputFilename string) *PolytopiaSaveJson {
 
 func ExportPolytopiaJsonFile(saveOutput *PolytopiaSaveOutput, outputFilename string) {
 	polytopiaJson := &PolytopiaSaveJson{
-		GameName:   "Battle of Polytopia",
-		FileFormat: "Polytopia Save State",
-		TileData:   saveOutput.TileData,
-		PlayerData: saveOutput.PlayerData,
+		GameName:        "Battle of Polytopia",
+		FileFormat:      "Polytopia Save State",
+		TileData:        saveOutput.TileData,
+		PlayerData:      saveOutput.PlayerData,
+		MapHeaderOutput: saveOutput.MapHeaderOutput,
 	}
 
 	file, err := json.MarshalIndent(polytopiaJson, "", " ")

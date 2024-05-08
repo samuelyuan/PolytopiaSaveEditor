@@ -169,7 +169,7 @@ func ConvertImprovementDataToBytes(improvementData ImprovementData) []byte {
 	}
 	data = append(data, ConvertUint16Bytes(int(improvementData.RebellionFlag))...)
 	if improvementData.RebellionFlag != 0 {
-		data = append(data, improvementData.RebellionBuffer...)
+		data = append(data, ConvertByteList(improvementData.RebellionBuffer)...)
 	}
 	return data
 }
@@ -295,9 +295,10 @@ func ConvertPlayerDataToBytes(playerData PlayerData) []byte {
 	allPlayerData = append(allPlayerData, byte(playerData.UnknownByte1))
 	allPlayerData = append(allPlayerData, ConvertUint32Bytes(playerData.UnknownInt1)...)
 
-	allPlayerData = append(allPlayerData, ConvertUint16Bytes(len(playerData.UnknownArr1)/5)...)
+	allPlayerData = append(allPlayerData, ConvertUint16Bytes(len(playerData.UnknownArr1))...)
 	for i := 0; i < len(playerData.UnknownArr1); i++ {
-		allPlayerData = append(allPlayerData, byte(playerData.UnknownArr1[i]))
+		allPlayerData = append(allPlayerData, byte(playerData.UnknownArr1[i].PlayerId), byte(playerData.UnknownArr1[i].Unknown1),
+			byte(playerData.UnknownArr1[i].Unknown2), byte(playerData.UnknownArr1[i].Unknown3), byte(playerData.UnknownArr1[i].Unknown4))
 	}
 
 	allPlayerData = append(allPlayerData, ConvertUint32Bytes(playerData.Currency)...)
@@ -318,7 +319,7 @@ func ConvertPlayerDataToBytes(playerData PlayerData) []byte {
 	allPlayerData = append(allPlayerData, ConvertUint16Bytes(len(playerData.Tasks))...)
 	for i := 0; i < len(playerData.Tasks); i++ {
 		allPlayerData = append(allPlayerData, ConvertUint16Bytes(playerData.Tasks[i].Type)...)
-		allPlayerData = append(allPlayerData, playerData.Tasks[i].Buffer...)
+		allPlayerData = append(allPlayerData, ConvertByteList(playerData.Tasks[i].Buffer)...)
 	}
 
 	allPlayerData = append(allPlayerData, ConvertUint32Bytes(playerData.TotalUnitsKilled)...)
@@ -506,7 +507,7 @@ func BuildEmptyCity(cityName string) ImprovementData {
 		FoundedTribe:           0,
 		CityRewards:            []int{},
 		RebellionFlag:          0,
-		RebellionBuffer:        []byte{},
+		RebellionBuffer:        []int{},
 	}
 }
 
@@ -679,15 +680,19 @@ func BuildEmptyPlayer(index int, playerName string, overrideColor color.RGBA) Pl
 
 	// unknown array
 	newArraySize := index + 1
-	unknownArr1 := make([]int, 0)
+	unknownArr1 := make([]PlayerUnknownData, 0)
 	for i := 1; i <= int(newArraySize); i++ {
 		playerId := i
 		if i == newArraySize {
 			playerId = 255
 		}
-		unknownArr1 = append(unknownArr1, playerId)
-		// unknown
-		unknownArr1 = append(unknownArr1, 0, 0, 0, 0)
+		unknownArr1 = append(unknownArr1, PlayerUnknownData{
+			PlayerId: playerId,
+			Unknown1: 0,
+			Unknown2: 0,
+			Unknown3: 0,
+			Unknown4: 0,
+		})
 	}
 
 	playerData := PlayerData{
@@ -728,13 +733,10 @@ func generateRandomColor() color.RGBA {
 	return color.RGBA{uint8(rand.Intn(255)), uint8(rand.Intn(255)), uint8(rand.Intn(255)), 255}
 }
 
-func BuildNewPlayerUnknownArr(oldUnknownArr1 []int, newPlayerId int) []int {
+func BuildNewPlayerUnknownArr(oldUnknownArr1 []PlayerUnknownData, newPlayerId int) []PlayerUnknownData {
 	existingLen := len(oldUnknownArr1)
-	if existingLen%5 != 0 {
-		log.Fatal(fmt.Sprintf("Invalid array length. New player unknown array length %v is not divisible by 5.", existingLen))
-	}
 
-	oldPlayerCount := existingLen / 5
+	oldPlayerCount := existingLen
 	oldMaximumPlayerId := oldPlayerCount - 1 // excludes player 255 nature
 	if oldMaximumPlayerId >= newPlayerId {
 		fmt.Println(fmt.Sprintf("Existing player count is %v, which includes players 1 to %v. No need to add player id %v.",
@@ -745,14 +747,18 @@ func BuildNewPlayerUnknownArr(oldUnknownArr1 []int, newPlayerId int) []int {
 			oldPlayerCount, oldPlayerCount-1, newPlayerId))
 	}
 
-	dataInsert := []int{newPlayerId, 0, 0, 0, 0}
+	dataInsert := PlayerUnknownData{
+		PlayerId: newPlayerId,
+		Unknown1: 0,
+		Unknown2: 0,
+		Unknown3: 0,
+		Unknown4: 0,
+	}
 	// assumes player 255 is always last
-	existingPlayers := oldUnknownArr1[0 : existingLen-5]
-	naturePlayer := make([]int, 5)
-	copy(naturePlayer, oldUnknownArr1[existingLen-5:existingLen])
+	existingPlayers := oldUnknownArr1[0 : existingLen-1]
+	naturePlayer := oldUnknownArr1[existingLen-1]
 
-	newUnknownArr1 := append(existingPlayers, dataInsert...)
-	newUnknownArr1 = append(newUnknownArr1, naturePlayer...)
+	newUnknownArr1 := append(existingPlayers, dataInsert, naturePlayer)
 	return newUnknownArr1
 }
 
@@ -821,6 +827,13 @@ func SwapPlayers(inputFilename string, playerId1 int, playerId2 int) {
 				saveOutput.TileData[i][j].Owner = unusedPlayerId
 			}
 
+			if saveOutput.TileData[i][j].Capital == playerId1 {
+				saveOutput.TileData[i][j].Capital = unusedPlayerId
+			}
+			if saveOutput.TileData[i][j].ImprovementData != nil && saveOutput.TileData[i][j].ImprovementData.ConnectedPlayerCapital == playerId1 {
+				saveOutput.TileData[i][j].ImprovementData.ConnectedPlayerCapital = unusedPlayerId
+			}
+
 			if saveOutput.TileData[i][j].Unit != nil && saveOutput.TileData[i][j].Unit.Owner == uint8(playerId1) {
 				saveOutput.TileData[i][j].Unit.Owner = uint8(unusedPlayerId)
 			}
@@ -836,6 +849,13 @@ func SwapPlayers(inputFilename string, playerId1 int, playerId2 int) {
 		for j := 0; j < saveOutput.MapWidth; j++ {
 			if saveOutput.TileData[i][j].Owner == playerId2 {
 				saveOutput.TileData[i][j].Owner = playerId1
+			}
+
+			if saveOutput.TileData[i][j].Capital == playerId2 {
+				saveOutput.TileData[i][j].Capital = playerId1
+			}
+			if saveOutput.TileData[i][j].ImprovementData != nil && saveOutput.TileData[i][j].ImprovementData.ConnectedPlayerCapital == playerId2 {
+				saveOutput.TileData[i][j].ImprovementData.ConnectedPlayerCapital = playerId1
 			}
 
 			if saveOutput.TileData[i][j].Unit != nil && saveOutput.TileData[i][j].Unit.Owner == uint8(playerId2) {
@@ -855,6 +875,13 @@ func SwapPlayers(inputFilename string, playerId1 int, playerId2 int) {
 				saveOutput.TileData[i][j].Owner = playerId2
 			}
 
+			if saveOutput.TileData[i][j].Capital == unusedPlayerId {
+				saveOutput.TileData[i][j].Capital = playerId2
+			}
+			if saveOutput.TileData[i][j].ImprovementData != nil && saveOutput.TileData[i][j].ImprovementData.ConnectedPlayerCapital == unusedPlayerId {
+				saveOutput.TileData[i][j].ImprovementData.ConnectedPlayerCapital = playerId2
+			}
+
 			if saveOutput.TileData[i][j].Unit != nil && saveOutput.TileData[i][j].Unit.Owner == uint8(unusedPlayerId) {
 				saveOutput.TileData[i][j].Unit.Owner = uint8(playerId2)
 			}
@@ -866,4 +893,112 @@ func SwapPlayers(inputFilename string, playerId1 int, playerId2 int) {
 	}
 
 	WriteMapToFile(inputFilename, saveOutput.TileData)
+
+	var player1Tribe, player2Tribe int
+	player1Color := make([]int, 4)
+	player2Color := make([]int, 4)
+	player1StartTile := [2]int{0, 0}
+	player2StartTile := [2]int{0, 0}
+	for i := 0; i < len(saveOutput.PlayerData); i++ {
+		if saveOutput.PlayerData[i].Id == playerId1 {
+			player1Tribe = saveOutput.PlayerData[i].Tribe
+			copy(player1Color, saveOutput.PlayerData[i].OverrideColor)
+			player1StartTile[0] = saveOutput.PlayerData[i].StartTileCoordinates[0]
+			player1StartTile[1] = saveOutput.PlayerData[i].StartTileCoordinates[1]
+		} else if saveOutput.PlayerData[i].Id == playerId2 {
+			player2Tribe = saveOutput.PlayerData[i].Tribe
+			copy(player2Color, saveOutput.PlayerData[i].OverrideColor)
+			player2StartTile[0] = saveOutput.PlayerData[i].StartTileCoordinates[0]
+			player2StartTile[1] = saveOutput.PlayerData[i].StartTileCoordinates[1]
+		}
+	}
+
+	for i := 0; i < len(saveOutput.PlayerData); i++ {
+		if saveOutput.PlayerData[i].Id == playerId1 {
+			saveOutput.PlayerData[i].Tribe = player2Tribe
+			saveOutput.PlayerData[i].OverrideColor = player2Color
+			saveOutput.PlayerData[i].StartTileCoordinates[0] = player2StartTile[0]
+			saveOutput.PlayerData[i].StartTileCoordinates[1] = player2StartTile[1]
+		} else if saveOutput.PlayerData[i].Id == playerId2 {
+			saveOutput.PlayerData[i].Tribe = player1Tribe
+			saveOutput.PlayerData[i].OverrideColor = player1Color
+			saveOutput.PlayerData[i].StartTileCoordinates[0] = player1StartTile[0]
+			saveOutput.PlayerData[i].StartTileCoordinates[1] = player1StartTile[1]
+		}
+	}
+
+	WritePlayersToFile(inputFilename, saveOutput.PlayerData)
+}
+
+func SetTileCapital(inputFilename string, targetX int, targetY int, newCityName string, updatedTribe int) {
+	saveOutput, err := ReadPolytopiaDecompressedFile(inputFilename)
+	if err != nil {
+		log.Fatal("Failed to read save file")
+	}
+
+	if updatedTribe >= 255 {
+		log.Fatal("Value must be less than 255")
+	}
+	capitalTile := saveOutput.TileData[targetY][targetX]
+	capitalTile.Capital = updatedTribe
+	capitalTile.Owner = updatedTribe
+	capitalTile.CapitalCoordinates[0] = capitalTile.WorldCoordinates[0]
+	capitalTile.CapitalCoordinates[1] = capitalTile.WorldCoordinates[1]
+
+	capitalTile.ImprovementExists = true
+	capitalTile.ImprovementType = 1
+	capitalTile.ImprovementData = &ImprovementData{
+		Level:                  1,
+		FoundedTurn:            0,
+		CurrentPopulation:      0,
+		TotalPopulation:        0,
+		Production:             1,
+		BaseScore:              0,
+		BorderSize:             1,
+		UpgradeCount:           0,
+		ConnectedPlayerCapital: 0,
+		HasCityName:            1,
+		CityName:               newCityName,
+		FoundedTribe:           0,
+		CityRewards:            []int{},
+		RebellionFlag:          0,
+		RebellionBuffer:        []int{},
+	}
+	saveOutput.TileData[targetY][targetX] = capitalTile
+	fmt.Println(fmt.Sprintf("Modified tile (%v, %v) to have capital %v", targetX, targetY, updatedTribe))
+
+	for deltaX := -1; deltaX <= 1; deltaX++ {
+		for deltaY := -1; deltaY <= 1; deltaY++ {
+			if deltaX == 0 && deltaY == 0 {
+				continue
+			}
+
+			neighborX := capitalTile.WorldCoordinates[0] + deltaX
+			neighborY := capitalTile.WorldCoordinates[1] + deltaY
+
+			if neighborX < 0 || neighborX >= saveOutput.MapWidth {
+				continue
+			}
+			if neighborY < 0 || neighborY >= saveOutput.MapHeight {
+				continue
+			}
+
+			saveOutput.TileData[neighborY][neighborX].Owner = updatedTribe
+			saveOutput.TileData[neighborY][neighborX].CapitalCoordinates[0] = capitalTile.WorldCoordinates[0]
+			saveOutput.TileData[neighborY][neighborX].CapitalCoordinates[1] = capitalTile.WorldCoordinates[1]
+			fmt.Println(fmt.Sprintf("Set neighboring tile (%v, %v) to have owner %v", neighborX, neighborY, updatedTribe))
+		}
+	}
+	WriteMapToFile(inputFilename, saveOutput.TileData)
+
+	for i := 0; i < len(saveOutput.PlayerData); i++ {
+		if saveOutput.PlayerData[i].Id == updatedTribe {
+			saveOutput.PlayerData[i].StartTileCoordinates[0] = capitalTile.WorldCoordinates[0]
+			saveOutput.PlayerData[i].StartTileCoordinates[1] = capitalTile.WorldCoordinates[1]
+			WritePlayersToFile(inputFilename, saveOutput.PlayerData)
+			fmt.Printf("Set player id %v start coordinates to (%v, %v)\n",
+				saveOutput.PlayerData[i].Id, saveOutput.PlayerData[i].StartTileCoordinates[0], saveOutput.PlayerData[i].StartTileCoordinates[1])
+			break
+		}
+	}
 }

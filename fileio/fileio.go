@@ -36,7 +36,7 @@ type MapHeaderOutput struct {
 	UnlockedTribesArr []int
 	GameDifficulty    int
 	NumOpponents      int
-	UnknownArr        []byte
+	UnknownArr        []int
 	SelectedTribes    map[int]int
 	MapWidth          int
 	MapHeight         int
@@ -90,7 +90,7 @@ type ImprovementData struct {
 	FoundedTribe           int
 	CityRewards            []int
 	RebellionFlag          int
-	RebellionBuffer        []byte
+	RebellionBuffer        []int
 }
 
 type PlayerData struct {
@@ -102,7 +102,7 @@ type PlayerData struct {
 	Tribe                int
 	UnknownByte1         int
 	UnknownInt1          int
-	UnknownArr1          []int
+	UnknownArr1          []PlayerUnknownData
 	Currency             int
 	Score                int
 	UnknownInt2          int
@@ -123,6 +123,14 @@ type PlayerData struct {
 	UnknownBuffer2       []int
 }
 
+type PlayerUnknownData struct {
+	PlayerId int
+	Unknown1 int
+	Unknown2 int
+	Unknown3 int
+	Unknown4 int
+}
+
 type UnitData struct {
 	Id                 uint32
 	Owner              uint8
@@ -141,7 +149,7 @@ type UnitData struct {
 
 type PlayerTaskData struct {
 	Type   int
-	Buffer []byte
+	Buffer []int
 }
 
 type DiplomacyMessage struct {
@@ -163,6 +171,7 @@ type DiplomacyData struct {
 type PolytopiaSaveOutput struct {
 	MapHeight         int
 	MapWidth          int
+	MapHeaderOutput   MapHeaderOutput
 	OwnerTribeMap     map[int]int
 	InitialTileData   [][]TileData
 	InitialPlayerData []PlayerData
@@ -283,9 +292,9 @@ func readImprovementData(streamReader *io.SectionReader) ImprovementData {
 	}
 
 	rebellionFlag := unsafeReadUint16(streamReader)
-	var rebellionBuffer []byte
+	var rebellionBuffer []int
 	if rebellionFlag != 0 {
-		rebellionBuffer = readFixedList(streamReader, 2)
+		rebellionBuffer = convertByteListToInt(readFixedList(streamReader, 2))
 	}
 
 	return ImprovementData{
@@ -486,7 +495,7 @@ func readMapHeader(streamReader *io.SectionReader) MapHeaderOutput {
 		UnlockedTribesArr: unlockedTribesArr,
 		GameDifficulty:    int(gameDifficulty),
 		NumOpponents:      int(numOpponents),
-		UnknownArr:        unknownArr,
+		UnknownArr:        convertByteListToInt(unknownArr),
 		SelectedTribes:    selectedTribeSkins,
 		MapWidth:          int(mapWidth),
 		MapHeight:         int(mapHeight),
@@ -507,11 +516,17 @@ func readPlayerData(streamReader *io.SectionReader) PlayerData {
 	playerArr1Key := buildPlayerArr1Key(int(playerId))
 	updateFileOffsetMap(fileOffsetMap, streamReader, playerArr1Key)
 	unknownArrLen1 := unsafeReadUint16(streamReader)
-	unknownArr1 := make([]int, 0)
+	unknownArr1 := make([]PlayerUnknownData, 0)
 	for i := 0; i < int(unknownArrLen1); i++ {
-		value1 := unsafeReadUint8(streamReader)
+		playerIdOther := unsafeReadUint8(streamReader)
 		value2 := readFixedList(streamReader, 4)
-		unknownArr1 = append(unknownArr1, int(value1), int(value2[0]), int(value2[1]), int(value2[2]), int(value2[3]))
+		unknownArr1 = append(unknownArr1, PlayerUnknownData{
+			PlayerId: int(playerIdOther),
+			Unknown1: int(value2[0]),
+			Unknown2: int(value2[1]),
+			Unknown3: int(value2[2]),
+			Unknown4: int(value2[3]),
+		})
 	}
 
 	playerCurrencyKey := buildPlayerCurrencyKey(int(playerId))
@@ -551,7 +566,7 @@ func readPlayerData(streamReader *io.SectionReader) PlayerData {
 		}
 		taskArr[i] = PlayerTaskData{
 			Type:   int(taskType),
-			Buffer: buffer,
+			Buffer: convertByteListToInt(buffer),
 		}
 	}
 
@@ -751,6 +766,7 @@ func ReadPolytopiaDecompressedFile(inputFilename string) (*PolytopiaSaveOutput, 
 	output := &PolytopiaSaveOutput{
 		MapHeight:         currentMapHeaderOutput.MapHeight,
 		MapWidth:          currentMapHeaderOutput.MapWidth,
+		MapHeaderOutput:   currentMapHeaderOutput,
 		OwnerTribeMap:     ownerTribeMap,
 		InitialTileData:   initialTileData,
 		InitialPlayerData: initialPlayerData,
