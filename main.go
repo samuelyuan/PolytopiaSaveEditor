@@ -216,24 +216,16 @@ func main() {
 		fileio.WritePlayersToFile(inputFilename, saveOutput.PlayerData)
 		fmt.Println(fmt.Sprintf("Set player %v newName to %v", playerId, newName))
 	} else if mode == "convert-tribe" {
-		oldValue, err := strconv.Atoi(*oldValuePtr)
+		oldTribe, err := strconv.Atoi(*oldValuePtr)
 		if err != nil {
 			log.Fatal(err)
 		}
-		updatedValue, err := strconv.Atoi(*newValuePtr)
+		newTribe, err := strconv.Atoi(*newValuePtr)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		tribeUnits, ok := saveOutput.TribeUnitMap[oldValue]
-		if !ok {
-			log.Fatal(fmt.Sprintf("Tribe %v doesn't exist", oldValue))
-		}
-
-		for i := 0; i < len(tribeUnits); i++ {
-			fileio.ModifyUnitTribe(inputFilename, tribeUnits[i].X, tribeUnits[i].Y, updatedValue)
-		}
-		fmt.Println(fmt.Sprintf("Changed all units under tribe %v to tribe %v. Total of %v units converted.", oldValue, updatedValue, len(tribeUnits)))
+		fileio.ConvertTribe(inputFilename, oldTribe, newTribe)
 	} else if mode == "convert-all-units" {
 		updatedValue, err := strconv.Atoi(*newValuePtr)
 		if err != nil {

@@ -422,9 +422,40 @@ func ModifyUnitTribe(inputFilename string, targetX int, targetY int, updatedValu
 			targetX, targetY, updatedTile.PreviousUnit.Owner))
 		updatedTile.PreviousUnit.Owner = uint8(updatedValue)
 	} else {
-		fmt.Println(fmt.Sprintf("No previous unit on tile (%v, %v)", targetX, targetY))
+		fmt.Println(fmt.Sprintf("No transition unit on tile (%v, %v)", targetX, targetY))
 	}
 	WriteTileToFile(inputFilename, updatedTile, targetX, targetY)
+}
+
+func ConvertTribe(inputFilename string, oldTribe int, newTribe int) {
+	saveOutput, err := ReadPolytopiaDecompressedFile(inputFilename)
+	if err != nil {
+		log.Fatal("Failed to read save file")
+	}
+
+	tribeUnits, ok := saveOutput.TribeUnitMap[oldTribe]
+	if !ok {
+		log.Fatal(fmt.Sprintf("Tribe %v doesn't exist", oldTribe))
+	}
+
+	for i := 0; i < len(tribeUnits); i++ {
+		targetX := tribeUnits[i].X
+		targetY := tribeUnits[i].Y
+
+		updatedTile := saveOutput.TileData[targetY][targetX]
+		if updatedTile.Unit != nil {
+			updatedTile.Unit.Owner = uint8(newTribe)
+		}
+		if updatedTile.PreviousUnit != nil {
+			updatedTile.PreviousUnit.Owner = uint8(newTribe)
+		}
+		fmt.Println(fmt.Sprintf("Converted unit on (%v, %v) from tribe %v to %v", targetX, targetY, oldTribe, newTribe))
+
+		saveOutput.TileData[targetY][targetX] = updatedTile
+	}
+
+	WriteMapToFile(inputFilename, saveOutput.TileData)
+	fmt.Println(fmt.Sprintf("Changed all units under tribe %v to tribe %v. Total of %v units converted.", oldTribe, newTribe, len(tribeUnits)))
 }
 
 func ModifyUnitType(inputFilename string, targetX int, targetY int, updatedValue int) {
