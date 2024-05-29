@@ -73,11 +73,10 @@ func GetFileRemainingData(inputFile *os.File, offset int) []byte {
 
 func WriteAndShiftData(inputFilename string, offsetStartOriginalBlockKey string, offsetEndOriginalBlockKey string, newData []byte) {
 	// Update file offsets to make sure they are up to date
-	saveOutput, err := ReadPolytopiaDecompressedFile(inputFilename)
+	_, err := ReadPolytopiaDecompressedFile(inputFilename)
 	if err != nil {
 		log.Fatal("Failed to read save file")
 	}
-	fmt.Println(fmt.Sprintf("Dimensions width: %v, height: %v", saveOutput.MapWidth, saveOutput.MapHeight))
 
 	// Open file to modify
 	inputFile, err := os.OpenFile(inputFilename, os.O_RDWR, 0644)
@@ -132,7 +131,7 @@ func ConvertByteList(oldArr []int) []byte {
 	newArr := make([]byte, len(oldArr))
 	for i := 0; i < len(oldArr); i++ {
 		if oldArr[i] > 255 {
-			log.Fatal("Byte list has value over 255")
+			log.Fatal(fmt.Sprintf("Byte list has value over 255. Value is %v for index %v", oldArr[i], i))
 		}
 		newArr[i] = byte(oldArr[i])
 	}
@@ -179,7 +178,8 @@ func ConvertUnitDataToBytes(unitData UnitData) []byte {
 	data = append(data, ConvertUint32Bytes(int(unitData.Id))...)
 	data = append(data, byte(unitData.Owner))
 	data = append(data, ConvertUint16Bytes(int(unitData.UnitType))...)
-	data = append(data, unitData.Unknown[:]...)
+	data = append(data, ConvertUint32Bytes(int(unitData.FollowerUnitId))...)
+	data = append(data, ConvertUint32Bytes(int(unitData.LeaderUnitId))...)
 	data = append(data, ConvertUint32Bytes(int(unitData.CurrentCoordinates[0]))...)
 	data = append(data, ConvertUint32Bytes(int(unitData.CurrentCoordinates[1]))...)
 	data = append(data, ConvertUint32Bytes(int(unitData.HomeCoordinates[0]))...)
@@ -232,16 +232,33 @@ func ConvertTileToBytes(tileData TileData) []byte {
 		tileBytes = append(tileBytes, 1)
 		tileBytes = append(tileBytes, ConvertUnitDataToBytes(*tileData.Unit)...)
 
-		if tileData.PreviousUnit != nil {
-			tileBytes = append(tileBytes, 1)
-			tileBytes = append(tileBytes, ConvertUnitDataToBytes(*tileData.PreviousUnit)...)
+		if tileData.PassengerUnit != nil {
+			tileBytes = append(tileBytes, 1) // has other unit flag is 1
+			tileBytes = append(tileBytes, ConvertUnitDataToBytes(*tileData.PassengerUnit)...)
 
+			// unknown flag, might be to check if passnger unit has another passnger unit
+			// should always be zero
 			tileBytes = append(tileBytes, 0)
-			tileBytes = append(tileBytes, ConvertByteList(tileData.BufferUnitData)...)
+
+			tileBytes = append(tileBytes, ConvertUint16Bytes(len(tileData.PassengerUnitEffectData))...)
+			for i := 0; i < len(tileData.PassengerUnitEffectData); i++ {
+				tileBytes = append(tileBytes, ConvertUint16Bytes(tileData.PassengerUnitEffectData[i])...)
+			}
+			tileBytes = append(tileBytes, ConvertByteList(tileData.PassengerUnitDirectionData)...)
+
+			tileBytes = append(tileBytes, ConvertUint16Bytes(len(tileData.UnitEffectData))...)
+			for i := 0; i < len(tileData.UnitEffectData); i++ {
+				tileBytes = append(tileBytes, ConvertUint16Bytes(tileData.UnitEffectData[i])...)
+			}
+			tileBytes = append(tileBytes, ConvertByteList(tileData.UnitDirectionData)...)
 		} else {
-			tileBytes = append(tileBytes, 0)
-			tileBytes = append(tileBytes, byte(tileData.BufferUnitFlag))
-			tileBytes = append(tileBytes, ConvertByteList(tileData.BufferUnitData)...)
+			tileBytes = append(tileBytes, 0) // has other unit flag is 0
+
+			tileBytes = append(tileBytes, ConvertUint16Bytes(len(tileData.UnitEffectData))...)
+			for i := 0; i < len(tileData.UnitEffectData); i++ {
+				tileBytes = append(tileBytes, ConvertUint16Bytes(tileData.UnitEffectData[i])...)
+			}
+			tileBytes = append(tileBytes, ConvertByteList(tileData.UnitDirectionData)...)
 		}
 	} else {
 		tileBytes = append(tileBytes, 0)
@@ -417,10 +434,10 @@ func ModifyUnitTribe(inputFilename string, targetX int, targetY int, updatedValu
 	} else {
 		fmt.Println(fmt.Sprintf("No unit on tile (%v, %v)", targetX, targetY))
 	}
-	if updatedTile.PreviousUnit != nil {
+	if updatedTile.PassengerUnit != nil {
 		fmt.Println(fmt.Sprintf("Before changing transition unit's owner on tile (%v, %v), current owner is %v",
-			targetX, targetY, updatedTile.PreviousUnit.Owner))
-		updatedTile.PreviousUnit.Owner = uint8(updatedValue)
+			targetX, targetY, updatedTile.PassengerUnit.Owner))
+		updatedTile.PassengerUnit.Owner = uint8(updatedValue)
 	} else {
 		fmt.Println(fmt.Sprintf("No transition unit on tile (%v, %v)", targetX, targetY))
 	}
@@ -446,8 +463,8 @@ func ConvertTribe(inputFilename string, oldTribe int, newTribe int) {
 		if updatedTile.Unit != nil {
 			updatedTile.Unit.Owner = uint8(newTribe)
 		}
-		if updatedTile.PreviousUnit != nil {
-			updatedTile.PreviousUnit.Owner = uint8(newTribe)
+		if updatedTile.PassengerUnit != nil {
+			updatedTile.PassengerUnit.Owner = uint8(newTribe)
 		}
 		fmt.Println(fmt.Sprintf("Converted unit on (%v, %v) from tribe %v to %v", targetX, targetY, oldTribe, newTribe))
 
@@ -490,7 +507,7 @@ func BuildEmptyTile(x int, y int) TileData {
 		ImprovementType:    -1,
 		ImprovementData:    nil,
 		Unit:               nil,
-		BufferUnitData:     []int{},
+		UnitDirectionData:  []int{},
 		PlayerVisibility:   []int{},
 		HasRoad:            false,
 		HasWaterRoute:      false,
@@ -746,7 +763,7 @@ func BuildEmptyPlayer(index int, playerName string, overrideColor color.RGBA) Pl
 		TotalUnitsKilled:     0,
 		TotalUnitsLost:       0,
 		TotalTribesDestroyed: 0,
-		OverrideColor:        []int{int(overrideColor.B), int(overrideColor.G), int(overrideColor.A), 0},
+		OverrideColor:        []int{int(overrideColor.B), int(overrideColor.G), int(overrideColor.R), 0},
 		UnknownByte2:         0,
 		UniqueImprovements:   []int{},
 		DiplomacyArr:         []DiplomacyData{},
@@ -869,8 +886,8 @@ func SwapPlayers(inputFilename string, playerId1 int, playerId2 int) {
 				saveOutput.TileData[i][j].Unit.Owner = uint8(unusedPlayerId)
 			}
 
-			if saveOutput.TileData[i][j].PreviousUnit != nil && saveOutput.TileData[i][j].PreviousUnit.Owner == uint8(playerId1) {
-				saveOutput.TileData[i][j].PreviousUnit.Owner = uint8(unusedPlayerId)
+			if saveOutput.TileData[i][j].PassengerUnit != nil && saveOutput.TileData[i][j].PassengerUnit.Owner == uint8(playerId1) {
+				saveOutput.TileData[i][j].PassengerUnit.Owner = uint8(unusedPlayerId)
 			}
 		}
 	}
@@ -893,8 +910,8 @@ func SwapPlayers(inputFilename string, playerId1 int, playerId2 int) {
 				saveOutput.TileData[i][j].Unit.Owner = uint8(playerId1)
 			}
 
-			if saveOutput.TileData[i][j].PreviousUnit != nil && saveOutput.TileData[i][j].PreviousUnit.Owner == uint8(playerId2) {
-				saveOutput.TileData[i][j].PreviousUnit.Owner = uint8(playerId1)
+			if saveOutput.TileData[i][j].PassengerUnit != nil && saveOutput.TileData[i][j].PassengerUnit.Owner == uint8(playerId2) {
+				saveOutput.TileData[i][j].PassengerUnit.Owner = uint8(playerId1)
 			}
 		}
 	}
@@ -917,8 +934,8 @@ func SwapPlayers(inputFilename string, playerId1 int, playerId2 int) {
 				saveOutput.TileData[i][j].Unit.Owner = uint8(playerId2)
 			}
 
-			if saveOutput.TileData[i][j].PreviousUnit != nil && saveOutput.TileData[i][j].PreviousUnit.Owner == uint8(unusedPlayerId) {
-				saveOutput.TileData[i][j].PreviousUnit.Owner = uint8(playerId2)
+			if saveOutput.TileData[i][j].PassengerUnit != nil && saveOutput.TileData[i][j].PassengerUnit.Owner == uint8(unusedPlayerId) {
+				saveOutput.TileData[i][j].PassengerUnit.Owner = uint8(playerId2)
 			}
 		}
 	}
