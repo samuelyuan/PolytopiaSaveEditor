@@ -150,7 +150,8 @@ func main() {
 			}
 		}
 	} else if mode == "list-units" {
-		for tribe, units := range saveOutput.TribeUnitMap {
+		tribeUnitMap := fileio.BuildTribeUnitMap(saveOutput)
+		for tribe, units := range tribeUnitMap {
 			fmt.Printf("Tribe %v has %v units:\n", tribe, len(units))
 			for i := 0; i < len(units); i++ {
 				fmt.Printf("Unit %v: %+v\n", i, units[i])
@@ -232,8 +233,10 @@ func main() {
 			log.Fatal(err)
 		}
 
+		newTribe := updatedValue
 		totalConverted := 0
-		for tribe, tribeUnits := range saveOutput.TribeUnitMap {
+		tribeUnitMap := fileio.BuildTribeUnitMap(saveOutput)
+		for tribe, tribeUnits := range tribeUnitMap {
 			if tribe == updatedValue {
 				continue
 			}
@@ -241,9 +244,23 @@ func main() {
 			fmt.Println(fmt.Sprintf("Converting all units from tribe %v to tribe %v. Total of %v units converted.", tribe, updatedValue, len(tribeUnits)))
 			totalConverted += len(tribeUnits)
 			for i := 0; i < len(tribeUnits); i++ {
-				fileio.ModifyUnitTribe(inputFilename, tribeUnits[i].X, tribeUnits[i].Y, updatedValue)
+				targetX := tribeUnits[i].X
+				targetY := tribeUnits[i].Y
+
+				updatedTile := saveOutput.TileData[targetY][targetX]
+				if updatedTile.Unit != nil {
+					updatedTile.Unit.Owner = uint8(newTribe)
+				}
+				if updatedTile.PassengerUnit != nil {
+					updatedTile.PassengerUnit.Owner = uint8(newTribe)
+				}
+				fmt.Println(fmt.Sprintf("Converted unit on (%v, %v) from tribe %v to %v", targetX, targetY, tribe, newTribe))
+
+				saveOutput.TileData[targetY][targetX] = updatedTile
 			}
 		}
+
+		fileio.WriteMapToFile(inputFilename, saveOutput.TileData)
 		fmt.Println(fmt.Sprintf("Changed all units to be under tribe %v. Converted total of %v units.", updatedValue, totalConverted))
 	} else if mode == "reveal-all-tiles" {
 		newTribe, err := strconv.Atoi(*newValuePtr)
@@ -307,6 +324,7 @@ func main() {
 		polytopiaJson := fileio.ImportPolytopiaDataFromJson(importJsonFilename)
 		fileio.WriteMapToFile(inputFilename, polytopiaJson.TileData)
 		fileio.WritePlayersToFile(inputFilename, polytopiaJson.PlayerData)
+		fileio.WriteMapHeaderToFile(inputFilename, polytopiaJson.MapHeaderOutput)
 		fmt.Println(fmt.Sprintf("Updated file %v with imported json", inputFilename))
 	} else if mode == "export-json" {
 		// parameters: -value=exportFilename
