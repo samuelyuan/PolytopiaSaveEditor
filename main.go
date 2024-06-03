@@ -161,7 +161,7 @@ func main() {
 		for i := 0; i < len(saveOutput.PlayerData); i++ {
 			playerData := saveOutput.PlayerData[i]
 			fmt.Printf("Player id: %v, name: %v, tribe: %v, override color: %v\n",
-				playerData.Id, playerData.Name, playerData.Tribe, playerData.OverrideColor)
+				playerData.PlayerId, playerData.Name, playerData.Tribe, playerData.OverrideColor)
 		}
 	} else if mode == "modify-player-color" {
 		playerId, err := strconv.Atoi(*playerIdPtr)
@@ -173,7 +173,7 @@ func main() {
 		colorB := *bPtr
 
 		for i := 0; i < len(saveOutput.PlayerData); i++ {
-			if saveOutput.PlayerData[i].Id == playerId {
+			if saveOutput.PlayerData[i].PlayerId == playerId {
 				saveOutput.PlayerData[i].OverrideColor = []int{int(colorB), int(colorG), int(colorR), 0}
 				break
 			}
@@ -192,7 +192,7 @@ func main() {
 		}
 
 		for i := 0; i < len(saveOutput.PlayerData); i++ {
-			if saveOutput.PlayerData[i].Id == playerId {
+			if saveOutput.PlayerData[i].PlayerId == playerId {
 				saveOutput.PlayerData[i].Tribe = newTribe
 				break
 			}
@@ -208,7 +208,7 @@ func main() {
 		newName := *newValuePtr
 
 		for i := 0; i < len(saveOutput.PlayerData); i++ {
-			if saveOutput.PlayerData[i].Id == playerId {
+			if saveOutput.PlayerData[i].PlayerId == playerId {
 				saveOutput.PlayerData[i].Name = newName
 				break
 			}
