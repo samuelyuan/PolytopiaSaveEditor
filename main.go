@@ -6,7 +6,7 @@ import (
 	"log"
 	"strconv"
 
-	"github.com/samuelyuan/PolytopiaSaveEditor/fileio"
+	polytopiamapmodel "github.com/samuelyuan/polytopiamapmodelgo"
 )
 
 func main() {
@@ -34,16 +34,21 @@ func main() {
 	fmt.Println("Mode:", mode)
 
 	if mode == "decompress" {
-		fileio.DecompressFile(inputFilename)
+		polytopiamapmodel.DecompressFile(inputFilename)
 		return
 	} else if mode == "compress" {
-		fileio.CompressFile(inputFilename)
+		polytopiamapmodel.CompressFile(inputFilename, outputFilename)
 		return
 	}
 
-	saveOutput, err := fileio.ReadPolytopiaDecompressedFile(inputFilename)
+	saveOutput, err := polytopiamapmodel.ReadPolytopiaDecompressedFile(inputFilename)
 	if err != nil {
 		log.Fatal("Failed to read save file")
+	}
+
+	fileInfo := polytopiamapmodel.FileInfo{
+		InputFilename: inputFilename,
+		GameVersion:   int(saveOutput.GameVersion),
 	}
 
 	if mode == "modify-unit-tribe" || mode == "modify-unit-type" {
@@ -55,9 +60,9 @@ func main() {
 		}
 
 		if mode == "modify-unit-tribe" {
-			fileio.ModifyUnitTribe(inputFilename, targetX, targetY, updatedValue)
+			polytopiamapmodel.ModifyUnitTribe(fileInfo, targetX, targetY, updatedValue)
 		} else if mode == "modify-unit-type" {
-			fileio.ModifyUnitType(inputFilename, targetX, targetY, updatedValue)
+			polytopiamapmodel.ModifyUnitType(fileInfo, targetX, targetY, updatedValue)
 		}
 		fmt.Println(fmt.Sprintf("Target is at (%v, %v), command: %v, updated value: %v", targetX, targetY, mode, updatedValue))
 	} else if mode == "reveal-tile" {
@@ -68,7 +73,7 @@ func main() {
 			log.Fatal(err)
 		}
 
-		fileio.RevealTileForTribe(inputFilename, targetX, targetY, updatedValue)
+		polytopiamapmodel.RevealTileForTribe(fileInfo, targetX, targetY, updatedValue)
 		fmt.Println(fmt.Sprintf("Revealed (%v, %v) for tribe %v", targetX, targetY, updatedValue))
 	} else if mode == "set-new-tile-capital" {
 		targetX := *xPtr
@@ -79,7 +84,7 @@ func main() {
 		}
 		newCityName := *cityNamePtr
 
-		fileio.SetTileCapital(inputFilename, targetX, targetY, newCityName, updatedTribe)
+		polytopiamapmodel.SetTileCapital(fileInfo, targetX, targetY, newCityName, updatedTribe)
 	} else if mode == "modify-tile-terrain" {
 		targetX := *xPtr
 		targetY := *yPtr
@@ -88,7 +93,7 @@ func main() {
 			log.Fatal(err)
 		}
 
-		fileio.ModifyTileTerrain(inputFilename, targetX, targetY, updatedValue)
+		polytopiamapmodel.ModifyTileTerrain(fileInfo, targetX, targetY, updatedValue)
 		fmt.Println(fmt.Sprintf("Modified tile (%v, %v) to have terrain %v", targetX, targetY, updatedValue))
 	} else if mode == "modify-tile-owner" {
 		targetX := *xPtr
@@ -100,7 +105,7 @@ func main() {
 
 		updatedTile := saveOutput.TileData[targetY][targetX]
 		updatedTile.Owner = updatedValue
-		fileio.WriteTileToFile(inputFilename, updatedTile, targetX, targetY)
+		polytopiamapmodel.WriteTileToFile(fileInfo, updatedTile, targetX, targetY)
 		fmt.Println(fmt.Sprintf("Modified tile (%v, %v) to have owner %v", targetX, targetY, updatedValue))
 	} else if mode == "modify-tile-road" {
 		targetX := *xPtr
@@ -120,7 +125,7 @@ func main() {
 		} else {
 			updatedTile.HasRoad = false
 		}
-		fileio.WriteTileToFile(inputFilename, updatedTile, targetX, targetY)
+		polytopiamapmodel.WriteTileToFile(fileInfo, updatedTile, targetX, targetY)
 		fmt.Println(fmt.Sprintf("Modified tile (%v, %v) to have road %v", targetX, targetY, updatedValue))
 	} else if mode == "add-city" {
 		targetX := *xPtr
@@ -131,16 +136,16 @@ func main() {
 			log.Fatal(err)
 		}
 
-		fileio.AddCityToTile(inputFilename, targetX, targetY, cityName, tribe)
+		polytopiamapmodel.AddCityToTile(fileInfo, targetX, targetY, cityName, tribe)
 		fmt.Println(fmt.Sprintf("Created city %v at (%v, %v) for player %v", cityName, targetX, targetY, tribe))
 	} else if mode == "add-player" {
-		fileio.AddPlayer(inputFilename)
+		polytopiamapmodel.AddPlayer(inputFilename)
 		fmt.Println("Added new player to game")
 	} else if mode == "reset-tile" {
 		targetX := *xPtr
 		targetY := *yPtr
 
-		fileio.ResetTile(inputFilename, targetX, targetY)
+		polytopiamapmodel.ResetTile(fileInfo, targetX, targetY)
 		fmt.Println(fmt.Sprintf("Reset tile (%v, %v)", targetX, targetY))
 	} else if mode == "list-cities" {
 		for tribe, cities := range saveOutput.TribeCityMap {
@@ -150,7 +155,7 @@ func main() {
 			}
 		}
 	} else if mode == "list-units" {
-		tribeUnitMap := fileio.BuildTribeUnitMap(saveOutput)
+		tribeUnitMap := polytopiamapmodel.BuildTribeUnitMap(saveOutput)
 		for tribe, units := range tribeUnitMap {
 			fmt.Printf("Tribe %v has %v units:\n", tribe, len(units))
 			for i := 0; i < len(units); i++ {
@@ -179,7 +184,7 @@ func main() {
 			}
 		}
 
-		fileio.WritePlayersToFile(inputFilename, saveOutput.PlayerData)
+		polytopiamapmodel.WritePlayersToFile(inputFilename, saveOutput.PlayerData)
 		fmt.Println(fmt.Sprintf("Set player %v color to RGB(%v, %v, %v)", playerId, colorR, colorG, colorB))
 	} else if mode == "modify-player-tribe" {
 		playerId, err := strconv.Atoi(*playerIdPtr)
@@ -198,7 +203,7 @@ func main() {
 			}
 		}
 
-		fileio.WritePlayersToFile(inputFilename, saveOutput.PlayerData)
+		polytopiamapmodel.WritePlayersToFile(inputFilename, saveOutput.PlayerData)
 		fmt.Println(fmt.Sprintf("Set player %v tribe to %v", playerId, newTribe))
 	} else if mode == "modify-player-name" {
 		playerId, err := strconv.Atoi(*playerIdPtr)
@@ -214,7 +219,7 @@ func main() {
 			}
 		}
 
-		fileio.WritePlayersToFile(inputFilename, saveOutput.PlayerData)
+		polytopiamapmodel.WritePlayersToFile(inputFilename, saveOutput.PlayerData)
 		fmt.Println(fmt.Sprintf("Set player %v newName to %v", playerId, newName))
 	} else if mode == "convert-tribe" {
 		oldTribe, err := strconv.Atoi(*oldValuePtr)
@@ -226,7 +231,7 @@ func main() {
 			log.Fatal(err)
 		}
 
-		fileio.ConvertTribe(inputFilename, oldTribe, newTribe)
+		polytopiamapmodel.ConvertTribe(fileInfo, oldTribe, newTribe)
 	} else if mode == "convert-all-units" {
 		updatedValue, err := strconv.Atoi(*newValuePtr)
 		if err != nil {
@@ -235,7 +240,7 @@ func main() {
 
 		newTribe := updatedValue
 		totalConverted := 0
-		tribeUnitMap := fileio.BuildTribeUnitMap(saveOutput)
+		tribeUnitMap := polytopiamapmodel.BuildTribeUnitMap(saveOutput)
 		for tribe, tribeUnits := range tribeUnitMap {
 			if tribe == updatedValue {
 				continue
@@ -260,7 +265,7 @@ func main() {
 			}
 		}
 
-		fileio.WriteMapToFile(inputFilename, saveOutput.TileData)
+		polytopiamapmodel.WriteMapToFile(fileInfo, saveOutput.TileData)
 		fmt.Println(fmt.Sprintf("Changed all units to be under tribe %v. Converted total of %v units.", updatedValue, totalConverted))
 	} else if mode == "reveal-all-tiles" {
 		newTribe, err := strconv.Atoi(*newValuePtr)
@@ -268,28 +273,28 @@ func main() {
 			log.Fatal(err)
 		}
 
-		fileio.RevealAllTiles(inputFilename, newTribe)
+		polytopiamapmodel.RevealAllTiles(fileInfo, newTribe)
 	} else if mode == "expand-map-rows" {
 		newRowDimensions, err := strconv.Atoi(*newValuePtr)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		fileio.ExpandRows(inputFilename, newRowDimensions)
+		polytopiamapmodel.ExpandRows(fileInfo, newRowDimensions)
 	} else if mode == "expand-map-cols" {
 		newRowDimensions, err := strconv.Atoi(*newValuePtr)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		fileio.ExpandColumns(inputFilename, newRowDimensions)
+		polytopiamapmodel.ExpandColumns(fileInfo, newRowDimensions)
 	} else if mode == "expand-map" {
 		newSquareSizeDimensions, err := strconv.Atoi(*newValuePtr)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		fileio.ExpandTiles(inputFilename, newSquareSizeDimensions)
+		polytopiamapmodel.ExpandTiles(fileInfo, newSquareSizeDimensions)
 	} else if mode == "swap-players" {
 		oldValue, err := strconv.Atoi(*oldValuePtr)
 		if err != nil {
@@ -301,35 +306,35 @@ func main() {
 		}
 
 		fmt.Println(fmt.Sprintf("Swap player id %v with id %v", oldValue, updatedValue))
-		fileio.SwapPlayers(inputFilename, oldValue, updatedValue)
+		polytopiamapmodel.SwapPlayers(fileInfo, oldValue, updatedValue)
 		fmt.Println(fmt.Sprintf("Swapped players %v and %v", oldValue, updatedValue))
 	} else if mode == "reset-game" {
 		initialMapHeight := len(saveOutput.InitialTileData)
 		initialMapWidth := len(saveOutput.InitialTileData[0])
-		fileio.WriteMapToFile(inputFilename, saveOutput.InitialTileData)
+		polytopiamapmodel.WriteMapToFile(fileInfo, saveOutput.InitialTileData)
 		for i := 0; i < len(saveOutput.InitialPlayerData); i++ {
 			saveOutput.InitialPlayerData[i].AvailableTech = []int{0}
 		}
-		fileio.WritePlayersToFile(inputFilename, saveOutput.InitialPlayerData)
-		fileio.ModifyMapDimensions(inputFilename, initialMapWidth, initialMapHeight)
+		polytopiamapmodel.WritePlayersToFile(inputFilename, saveOutput.InitialPlayerData)
+		polytopiamapmodel.ModifyMapDimensions(inputFilename, initialMapWidth, initialMapHeight)
 	} else if mode == "copy-data" {
 		// tests byte conversion of map data and player data
 		// make sure new data is equal to old data
-		fileio.WriteMapToFile(inputFilename, saveOutput.TileData)
-		fileio.WritePlayersToFile(inputFilename, saveOutput.PlayerData)
+		polytopiamapmodel.WriteMapToFile(fileInfo, saveOutput.TileData)
+		polytopiamapmodel.WritePlayersToFile(inputFilename, saveOutput.PlayerData)
 	} else if mode == "import-json" {
 		// parameters: -value=importJsonFilename
 		importJsonFilename := *newValuePtr
 		fmt.Println(fmt.Sprintf("Importing data from %v", importJsonFilename))
-		polytopiaJson := fileio.ImportPolytopiaDataFromJson(importJsonFilename)
-		fileio.WriteMapToFile(inputFilename, polytopiaJson.TileData)
-		fileio.WritePlayersToFile(inputFilename, polytopiaJson.PlayerData)
-		fileio.WriteMapHeaderToFile(inputFilename, polytopiaJson.MapHeaderOutput)
+		polytopiaJson := polytopiamapmodel.ImportPolytopiaDataFromJson(importJsonFilename)
+		polytopiamapmodel.WriteMapToFile(fileInfo, polytopiaJson.TileData)
+		polytopiamapmodel.WritePlayersToFile(inputFilename, polytopiaJson.PlayerData)
+		polytopiamapmodel.WriteMapHeaderToFile(inputFilename, polytopiaJson.MapHeaderOutput)
 		fmt.Println(fmt.Sprintf("Updated file %v with imported json", inputFilename))
 	} else if mode == "export-json" {
 		// parameters: -value=exportFilename
 		exportJsonFilename := *newValuePtr
-		fileio.ExportPolytopiaJsonFile(saveOutput, exportJsonFilename)
+		polytopiamapmodel.ExportPolytopiaJsonFile(saveOutput, exportJsonFilename)
 		fmt.Println(fmt.Sprintf("Exported json from save state %v to %v", inputFilename, exportJsonFilename))
 	} else {
 		log.Fatal("Invalid mode:", mode)
